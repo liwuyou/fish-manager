@@ -69,6 +69,21 @@ bool lastButton4 = HIGH;
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
 
+// 长按检测变量
+unsigned long button1PressTime = 0;
+unsigned long button2PressTime = 0;
+unsigned long button3PressTime = 0;
+unsigned long button4PressTime = 0;
+const unsigned long longPressDelay = 1000;
+
+bool button1LongPressed = false;
+bool button2LongPressed = false;
+bool button3LongPressed = false;
+bool button4LongPressed = false;
+
+// 舵机模式（0:左限位, 1:右限位, 2:回正）
+int servoMode = 2;
+
 struct WiFiConfig {
   String ssid;
   String password;
@@ -550,7 +565,8 @@ void printStatus() {
   Serial.println("水泵2: 档位" + String(pwm2Level) + " (PWM:" + String(pwmValues[pwm2Level]) + ")");
   Serial.println("灯条: 档位" + String(pwm3Level) + " (PWM:" + String(pwmValues[pwm3Level]) + ")");
   Serial.println("继电器: " + String(relayState ? "ON" : "OFF"));
-  Serial.println("舵机: " + String(servoAngle) + "° (限位: " + String(servoMinAngle) + "°-" + String(servoMaxAngle) + "°)");
+  String servoModeStr = (servoMode == 0) ? "左限位" : (servoMode == 1) ? "右限位" : "回正";
+  Serial.println("舵机: " + String(servoAngle) + "° (模式:" + servoModeStr + ", 限位: " + String(servoMinAngle) + "°-" + String(servoMaxAngle) + "°)");
   Serial.println("WiFi: " + String(wifiConnected ? "已连接" : "未连接"));
   Serial.println("AP客户端: " + String(WiFi.softAPgetStationNum()));
   Serial.println("=================");
@@ -560,43 +576,99 @@ void printStatus() {
 void handleButtons() {
   unsigned long currentTime = millis();
   
-  if (currentTime - lastDebounceTime > debounceDelay) {
-    int button1 = digitalRead(BUTTON1_PIN);
-    int button2 = digitalRead(BUTTON2_PIN);
-    int button3 = digitalRead(BUTTON3_PIN);
-    int button4 = digitalRead(BUTTON4_PIN);
-    
-    if (button1 == LOW && lastButton1 == HIGH) {
-      relayState = !relayState;
-      digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
-      Serial.println("【按钮】继电器: " + String(relayState ? "ON" : "OFF"));
-    }
-    
-    if (button2 == LOW && lastButton2 == HIGH) {
-      pwm1Level = (pwm1Level + 1) % 4;
+  int button1 = digitalRead(BUTTON1_PIN);
+  int button2 = digitalRead(BUTTON2_PIN);
+  int button3 = digitalRead(BUTTON3_PIN);
+  int button4 = digitalRead(BUTTON4_PIN);
+
+  // 按键1: 水泵1 - 短按加1档，长按归零
+  if (button1 == LOW && lastButton1 == HIGH) {
+    button1PressTime = currentTime;
+    button1LongPressed = false;
+  } else if (button1 == LOW && !button1LongPressed) {
+    if (currentTime - button1PressTime >= longPressDelay) {
+      pwm1Level = 0;
       ledcWrite(PWM1_PIN, pwmValues[pwm1Level]);
-      Serial.println("【按钮】水泵1: 档位" + String(pwm1Level));
+      Serial.println("【按钮】水泵1: 长按归零");
+      button1LongPressed = true;
     }
-
-    if (button3 == LOW && lastButton3 == HIGH) {
-      pwm2Level = (pwm2Level + 1) % 4;
-      ledcWrite(PWM2_PIN, pwmValues[pwm2Level]);
-      Serial.println("【按钮】水泵2: 档位" + String(pwm2Level));
-    }
-
-    if (button4 == LOW && lastButton4 == HIGH) {
-      pwm3Level = (pwm3Level + 1) % 4;
-      ledcWrite(PWM3_PIN, pwmValues[pwm3Level]);
-      Serial.println("【按钮】灯条: 档位" + String(pwm3Level));
-    }
-    
-    lastButton1 = button1;
-    lastButton2 = button2;
-    lastButton3 = button3;
-    lastButton4 = button4;
-    
-    lastDebounceTime = currentTime;
+  } else if (button1 == HIGH && lastButton1 == LOW && !button1LongPressed) {
+    pwm1Level = (pwm1Level + 1) % 4;
+    ledcWrite(PWM1_PIN, pwmValues[pwm1Level]);
+    Serial.println("【按钮】水泵1: 档位" + String(pwm1Level));
   }
+
+  // 按键2: 水泵2 - 短按加1档，长按归零
+  if (button2 == LOW && lastButton2 == HIGH) {
+    button2PressTime = currentTime;
+    button2LongPressed = false;
+  } else if (button2 == LOW && !button2LongPressed) {
+    if (currentTime - button2PressTime >= longPressDelay) {
+      pwm2Level = 0;
+      ledcWrite(PWM2_PIN, pwmValues[pwm2Level]);
+      Serial.println("【按钮】水泵2: 长按归零");
+      button2LongPressed = true;
+    }
+  } else if (button2 == HIGH && lastButton2 == LOW && !button2LongPressed) {
+    pwm2Level = (pwm2Level + 1) % 4;
+    ledcWrite(PWM2_PIN, pwmValues[pwm2Level]);
+    Serial.println("【按钮】水泵2: 档位" + String(pwm2Level));
+  }
+
+  // 按键3: 灯光 - 短按加1档，长按归零
+  if (button3 == LOW && lastButton3 == HIGH) {
+    button3PressTime = currentTime;
+    button3LongPressed = false;
+  } else if (button3 == LOW && !button3LongPressed) {
+    if (currentTime - button3PressTime >= longPressDelay) {
+      pwm3Level = 0;
+      ledcWrite(PWM3_PIN, pwmValues[pwm3Level]);
+      Serial.println("【按钮】灯光: 长按归零");
+      button3LongPressed = true;
+    }
+  } else if (button3 == HIGH && lastButton3 == LOW && !button3LongPressed) {
+    pwm3Level = (pwm3Level + 1) % 4;
+    ledcWrite(PWM3_PIN, pwmValues[pwm3Level]);
+    Serial.println("【按钮】灯光: 档位" + String(pwm3Level));
+  }
+
+  // 按键4: 舵机 - 短按循环(左限位,右限位,回正)，长按回中
+  if (button4 == LOW && lastButton4 == HIGH) {
+    button4PressTime = currentTime;
+    button4LongPressed = false;
+  } else if (button4 == LOW && !button4LongPressed) {
+    if (currentTime - button4PressTime >= longPressDelay) {
+      servoAngle = servoHomeAngle;
+      servoAngle = constrain(servoAngle, servoMinAngle, servoMaxAngle);
+      myServo.write(servoAngle);
+      servoMode = 2;
+      Serial.println("【按钮】舵机: 长按回中");
+      button4LongPressed = true;
+    }
+  } else if (button4 == HIGH && lastButton4 == LOW && !button4LongPressed) {
+    servoMode = (servoMode + 1) % 3;
+    switch(servoMode) {
+      case 0:
+        servoAngle = servoMinAngle;
+        Serial.println("【按钮】舵机: 左限位");
+        break;
+      case 1:
+        servoAngle = servoMaxAngle;
+        Serial.println("【按钮】舵机: 右限位");
+        break;
+      case 2:
+        servoAngle = servoHomeAngle;
+        Serial.println("【按钮】舵机: 回正");
+        break;
+    }
+    servoAngle = constrain(servoAngle, servoMinAngle, servoMaxAngle);
+    myServo.write(servoAngle);
+  }
+  
+  lastButton1 = button1;
+  lastButton2 = button2;
+  lastButton3 = button3;
+  lastButton4 = button4;
 }
 
 // ==================== 初始化 ====================
