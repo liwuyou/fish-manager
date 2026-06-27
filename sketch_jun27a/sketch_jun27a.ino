@@ -3,6 +3,8 @@
 #include <DNSServer.h>
 #include <ESP32Servo.h>
 #include <EEPROM.h>
+#include <U8g2lib.h>
+#include <Wire.h>
 
 // ==================== 配置常量 ====================
 // 引脚定义
@@ -15,6 +17,10 @@
 #define BUTTON2_PIN   2    // 按钮2 - GPIO2
 #define BUTTON3_PIN   0    // 按钮3 - GPIO0
 #define BUTTON4_PIN   5    // 按钮4 - GPIO5
+
+// OLED引脚定义 (I2C)
+#define OLED_SDA_PIN  21   // OLED SDA - GPIO21
+#define OLED_SCL_PIN  22   // OLED SCL - GPIO22
 
 // LEDC配置 - 适用于ESP32 Arduino Core 3.x版本
 #define LEDC_FREQ     1000    // 1kHz
@@ -92,6 +98,9 @@ struct WiFiConfig {
 
 WiFiConfig wifiConfig;
 
+// OLED显示对象
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+
 // ==================== 函数声明 ====================
 void handleRoot();
 void handleSetPWM();
@@ -109,6 +118,7 @@ void connectToWiFi();
 void checkWiFiConnection();
 void handleButtons();
 void printStatus();
+void updateOLED();
 void saveServoLimits();
 void loadServoLimits();
 
@@ -572,6 +582,54 @@ void printStatus() {
   Serial.println("=================");
 }
 
+// ==================== OLED显示更新 ====================
+void updateOLED() {
+  u8g2.clearBuffer();
+  
+  u8g2.setFont(u8g2_font_ncenB08_tr);
+  
+  // 第1行: 水泵1
+  u8g2.setCursor(0, 10);
+  u8g2.print("Moter1:");
+  u8g2.print(pwm1Level);
+  u8g2.print("(0/1/2/3)");
+  
+  // 第2行: 水泵2
+  u8g2.setCursor(0, 22);
+  u8g2.print("Moter2:");
+  u8g2.print(pwm2Level);
+  u8g2.print("(0/1/2/3)");
+  
+  // 第3行: LED
+  u8g2.setCursor(0, 34);
+  u8g2.print("LED:");
+  u8g2.print(pwm3Level);
+  u8g2.print("(0/1/2/3)");
+  
+  // 第4行: 舵机
+  u8g2.setCursor(0, 46);
+  u8g2.print("servo:");
+  if (servoMode == 0) {
+    u8g2.print("min");
+  } else if (servoMode == 1) {
+    u8g2.print("max");
+  } else {
+    u8g2.print("mid");
+  }
+  u8g2.print("(");
+  u8g2.print(servoMinAngle);
+  u8g2.print("/");
+  u8g2.print(servoMaxAngle);
+  u8g2.print(")");
+  
+  // 第5行: WiFi
+  u8g2.setCursor(0, 58);
+  u8g2.print("Wifi:");
+  u8g2.print(wifiConnected ? "true" : "false");
+  
+  u8g2.sendBuffer();
+}
+
 // ==================== 按钮处理 ====================
 void handleButtons() {
   unsigned long currentTime = millis();
@@ -684,6 +742,18 @@ void setup() {
   pinMode(BUTTON2_PIN, INPUT_PULLUP);
   pinMode(BUTTON3_PIN, INPUT_PULLUP);
   pinMode(BUTTON4_PIN, INPUT_PULLUP);
+  
+  // ========== OLED初始化 ==========
+  Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
+  u8g2.begin();
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_ncenB08_tr);
+  u8g2.setCursor(0, 20);
+  u8g2.print("Fish Manager");
+  u8g2.setCursor(0, 40);
+  u8g2.print("Starting...");
+  u8g2.sendBuffer();
+  Serial.println("OLED初始化完成");
   
   // ========== 关键：为舵机库分配独立的定时器 ==========
   // 在初始化舵机之前，为ESP32Servo库分配一个专用的定时器（定时器0）
@@ -809,10 +879,16 @@ void loop() {
   checkWiFiConnection();
   
   static unsigned long lastStatusPrint = 0;
+  static unsigned long lastOledUpdate = 0;
   
   if (millis() - lastStatusPrint > 30000) {
     lastStatusPrint = millis();
     printStatus();
+  }
+  
+  if (millis() - lastOledUpdate > 500) {
+    lastOledUpdate = millis();
+    updateOLED();
   }
   
   if (wifiConfig.configured && !wifiConnected && WiFi.status() != WL_CONNECTED) {
