@@ -172,7 +172,6 @@ const API_BASE = '';
 let currentPhone = localStorage.getItem('phone') || '';
 let currentDeviceKey = '';
 let statusTimer = null;
-let pendingRefresh = false;
 
 function showToast(msg) {
     const t = document.getElementById('toast');
@@ -314,8 +313,6 @@ function stopStatusPolling() {
 }
 
 async function fetchStatus() {
-    if (pendingRefresh) return;
-    
     try {
         const res = await fetch(API_BASE + '/api/status?device_key=' + currentDeviceKey);
         const data = await res.json();
@@ -368,11 +365,7 @@ async function sendCmd(cmd, params) {
         const data = await res.json();
         if (data.success) {
             showToast('指令已发送');
-            pendingRefresh = true;
-            setTimeout(() => {
-                pendingRefresh = false;
-                fetchStatus();
-            }, 3000);
+            setTimeout(fetchStatus, 800);
         } else {
             showToast(data.message || '发送失败');
         }
@@ -382,10 +375,15 @@ async function sendCmd(cmd, params) {
 }
 
 function setPump(num, level) {
+    // 乐观更新：立即切换按钮高亮
+    const ids = {1: 'pump1Btns', 2: 'pump2Btns'};
+    updateLevelBtns(ids[num], level);
     sendCmd('set_pump', {pump: num, level: level});
 }
 
 function setLight(level) {
+    // 乐观更新：立即切换按钮高亮
+    updateLevelBtns('lightBtns', level);
     sendCmd('set_light', {level: level});
 }
 

@@ -146,8 +146,7 @@ export default {
       },
       pumpLevels: ['关', '一档', '二档', '三档'],
       lastUpdateTime: '',
-      timer: null,
-      pendingRefresh: false
+      timer: null
     }
   },
   onLoad(options) {
@@ -169,8 +168,6 @@ export default {
   },
   methods: {
     async loadStatus() {
-      if (this.pendingRefresh) return
-      
       try {
         const res = await getDeviceStatus(this.deviceKey)
         if (res.success) {
@@ -205,15 +202,13 @@ export default {
         return
       }
       
+      // 乐观更新
+      this.status[`pwm${pump}Level`] = level
+      
       try {
         const res = await sendControlCommand(this.deviceKey, 'set_pump', { pump, level })
         if (res.success) {
-          this.status[`pwm${pump}Level`] = level
-          this.pendingRefresh = true
-          setTimeout(() => {
-            this.pendingRefresh = false
-            this.loadStatus()
-          }, 3000)
+          setTimeout(() => this.loadStatus(), 800)
           uni.showToast({ title: '设置成功', icon: 'success' })
         } else {
           uni.showToast({ title: res.message || '设置失败', icon: 'none' })
@@ -229,15 +224,13 @@ export default {
         return
       }
       
+      // 乐观更新
+      this.status.pwm3Level = level
+      
       try {
         const res = await sendControlCommand(this.deviceKey, 'set_light', { level })
         if (res.success) {
-          this.status.pwm3Level = level
-          this.pendingRefresh = true
-          setTimeout(() => {
-            this.pendingRefresh = false
-            this.loadStatus()
-          }, 3000)
+          setTimeout(() => this.loadStatus(), 800)
           uni.showToast({ title: '设置成功', icon: 'success' })
         } else {
           uni.showToast({ title: res.message || '设置失败', icon: 'none' })

@@ -69,7 +69,7 @@
 #define AP_TIMEOUT 60000         // AP超时 1分钟
 
 // ==================== 远程服务器配置 ====================
-#define WS_SERVER_HOST "192.168.2.11"
+#define WS_SERVER_HOST "218.244.156.155"
 #define WS_SERVER_PORT 7965
 #define WS_SERVER_PATH "/ws/device"
 #define WS_HEARTBEAT_INTERVAL 30000  // WebSocket心跳间隔 30秒

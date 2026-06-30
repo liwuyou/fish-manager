@@ -1,39 +1,46 @@
 {
-  "name": "鱼箱管理",
-  "appid": "__UNI__FISH_TANK",
-  "description": "养鱼生态箱远程管理APP",
-  "versionName": "1.0.0",
-  "versionCode": "100",
-  "transformPx": false,
-  "h5": {
-    "title": "鱼箱管理",
-    "router": {
-      "mode": "hash",
-      "base": "./"
-    },
-    "devServer": {
-      "port": 5173,
-      "proxy": {
-        "/api": {
-          "target": "http://192.168.2.11:7965",
-          "changeOrigin": true
+    "name" : "鱼箱管理",
+    "appid" : "__UNI__1B4AA53",
+    "description" : "养鱼生态箱远程管理APP",
+    "versionName" : "1.0.0",
+    "versionCode" : "100",
+    "transformPx" : false,
+    "h5" : {
+        "title" : "鱼箱管理",
+        "router" : {
+            "mode" : "hash",
+            "base" : "./"
         },
-        "/ws": {
-          "target": "ws://192.168.2.11:7965",
-          "changeOrigin": true,
-          "ws": true
+        "devServer" : {
+            "port" : 5173,
+            "proxy" : {
+                "/api" : {
+                    "target" : "http://192.168.2.11:7965",
+                    "changeOrigin" : true
+                },
+                "/ws" : {
+                    "target" : "ws://192.168.2.11:7965",
+                    "changeOrigin" : true,
+                    "ws" : true
+                }
+            }
         }
-      }
-    }
-  },
-  "mp-weixin": {
-    "appid": "",
-    "setting": {
-      "urlCheck": false
     },
-    "usingComponents": true
-  },
-  "uni-app": {
-    "usingComponents": true
-  }
+    "mp-weixin" : {
+        "appid" : "",
+        "setting" : {
+            "urlCheck" : false
+        },
+        "usingComponents" : true
+    },
+    "uni-app" : {
+        "usingComponents" : true
+    },
+    "app-plus" : {
+        "distribute" : {
+            "ios" : {
+                "dSYMs" : false
+            }
+        }
+    }
 }
