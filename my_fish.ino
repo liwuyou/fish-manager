@@ -56,8 +56,11 @@
 #define SERVO_LEFT_LIMIT   0
 #define SERVO_RIGHT_LIMIT  180
 #define SERVO_MID_POS      90
-#define SERVO_MOVE_SPEED   50     // 度/秒
-#define SERVO_RIGHT_STOP_TIME 1000 // 右限位停顿时间(ms)
+#define SERVO_MOVE_SPEED   60      // 度/秒
+#define SERVO_STEP_DELAY   20      // 步进间隔(ms)
+#define SERVO_RIGHT_STOP_TIME 2000 // 右限位停顿时间(ms)
+#define SERVO_MIN_ANGLE    0
+#define SERVO_MAX_ANGLE    180
 
 // ==================== OLED配置 ====================
 #define OLED_UPDATE_INTERVAL 2000  // OLED更新间隔
@@ -727,42 +730,62 @@ void updateServo() {
   
   static int servoPhase = 0;
   static unsigned long phaseStartTime = 0;
-  static int currentAngle = SERVO_MID_POS;
+  static int currentAngle = SERVO_LEFT_LIMIT;
+  static int targetAngle = SERVO_LEFT_LIMIT;
+  static unsigned long lastStepTime = 0;
   
   unsigned long now = millis();
+  int stepSize = SERVO_MOVE_SPEED * SERVO_STEP_DELAY / 1000;
+  if (stepSize < 1) stepSize = 1;
   
   if (servoPhase == 0) {
     currentAngle = servo.read();
+    if (currentAngle < SERVO_MIN_ANGLE) currentAngle = SERVO_MIN_ANGLE;
+    if (currentAngle > SERVO_MAX_ANGLE) currentAngle = SERVO_MAX_ANGLE;
+    targetAngle = SERVO_RIGHT_LIMIT;
     servoPhase = 1;
     phaseStartTime = now;
-    servo.write(servoRightLimit);
+    lastStepTime = now;
     return;
   }
   
   if (servoPhase == 1) {
-    int moveTime = abs(servoRightLimit - currentAngle) * 1000 / SERVO_MOVE_SPEED;
-    if (now - phaseStartTime >= moveTime) {
-      servoPhase = 2;
-      phaseStartTime = now;
+    if (now - lastStepTime >= SERVO_STEP_DELAY) {
+      lastStepTime = now;
+      if (currentAngle < targetAngle) {
+        currentAngle += stepSize;
+        if (currentAngle > targetAngle) currentAngle = targetAngle;
+        servo.write(currentAngle);
+      } else {
+        servoPhase = 2;
+        phaseStartTime = now;
+      }
     }
     return;
   }
   
   if (servoPhase == 2) {
     if (now - phaseStartTime >= SERVO_RIGHT_STOP_TIME) {
+      targetAngle = SERVO_LEFT_LIMIT;
       servoPhase = 3;
       phaseStartTime = now;
-      servo.write(servoLeftLimit);
+      lastStepTime = now;
     }
     return;
   }
   
   if (servoPhase == 3) {
-    int moveTime = abs(servoRightLimit - servoLeftLimit) * 1000 / SERVO_MOVE_SPEED;
-    if (now - phaseStartTime >= moveTime) {
-      servoPhase = 0;
-      servoMoving = false;
-      playBuzzerTone(BUZZER_TONE_SUCCESS, BUZZER_DURATION_SHORT);
+    if (now - lastStepTime >= SERVO_STEP_DELAY) {
+      lastStepTime = now;
+      if (currentAngle > targetAngle) {
+        currentAngle -= stepSize;
+        if (currentAngle < targetAngle) currentAngle = targetAngle;
+        servo.write(currentAngle);
+      } else {
+        servoPhase = 0;
+        servoMoving = false;
+        playBuzzerTone(BUZZER_TONE_SUCCESS, BUZZER_DURATION_SHORT);
+      }
     }
     return;
   }
@@ -835,7 +858,7 @@ void powerOnSystem() {
   }
   
   servo.attach(SERVO_PIN);
-  servo.write(SERVO_MID_POS);
+  servo.write(SERVO_LEFT_LIMIT);
   
   ledcWrite(PWM1_PIN, 0);
   ledcWrite(PWM2_PIN, 0);
@@ -942,7 +965,7 @@ void setup() {
     }
     
     servo.attach(SERVO_PIN);
-    servo.write(SERVO_MID_POS);
+    servo.write(SERVO_LEFT_LIMIT);
     
     startWiFiAP();
     
@@ -992,7 +1015,7 @@ void loop() {
   }
   
   // 状态上报
-  if (wsConnected && systemPowered && millis() - lastStatusReport > STATUS_REPORT_INTERVAL) {
+  if (wsConnected && millis() - lastStatusReport > STATUS_REPORT_INTERVAL) {
     lastStatusReport = millis();
     wsSendStatus();
   }

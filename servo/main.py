@@ -123,10 +123,6 @@ def control_device():
     if not device_key or not cmd:
         return jsonify({'success': False, 'message': '参数错误'}), 400
     
-    dev = devices.get(device_key)
-    if not dev or not dev.get('online'):
-        return jsonify({'success': False, 'message': '设备不在线'}), 404
-    
     ws = device_ws.get(device_key)
     if not ws:
         return jsonify({'success': False, 'message': '设备连接已断开'}), 500

@@ -334,6 +334,13 @@ async function fetchStatus() {
         document.getElementById('tempValue').textContent = s.adcTempVoltage ? s.adcTempVoltage.toFixed(2) + 'V' : '--';
         document.getElementById('wqValue').textContent = s.adcWQVoltage ? s.adcWQVoltage.toFixed(2) + 'V' : '--';
         
+        // 更新系统电源状态
+        const powered = s.systemPowered;
+        document.getElementById('powerStatus').textContent = powered ? '开机' : '关机';
+        document.getElementById('powerStatus').className = powered ? 'value online' : 'value offline';
+        document.getElementById('powerOnBtn').style.display = powered ? 'none' : 'block';
+        document.getElementById('powerOffBtn').style.display = powered ? 'block' : 'none';
+        
     } catch(e) {}
 }
 
@@ -380,9 +387,13 @@ function triggerServo() {
 }
 
 function powerOff() {
-    if (confirm('确定要关机吗？')) {
+    if (confirm('确定要关机吗？\n关机后设备保持网络连接，可远程开机。')) {
         sendCmd('power_off', {});
     }
+}
+
+function powerOn() {
+    sendCmd('power_on', {});
 }
 
 if (currentPhone) {

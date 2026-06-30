@@ -146,7 +146,8 @@ export default {
       },
       pumpLevels: ['关', '一档', '二档', '三档'],
       lastUpdateTime: '',
-      timer: null
+      timer: null,
+      pendingRefresh: false
     }
   },
   onLoad(options) {
@@ -171,8 +172,17 @@ export default {
       try {
         const res = await getDeviceStatus(this.deviceKey)
         if (res.success) {
-          this.status = res.status || this.status
-          this.status.online = res.online || false
+          const s = res.status || {}
+          this.status = {
+            online: res.online || false,
+            pwm1Level: s.pwm1Level || 0,
+            pwm2Level: s.pwm2Level || 0,
+            pwm3Level: s.pwm3Level || 0,
+            servoMoving: s.servoMoving || false,
+            adcWQVoltage: s.adcWQVoltage || 0,
+            adcTempVoltage: s.adcTempVoltage || 0,
+            systemPowered: s.systemPowered !== false
+          }
           this.lastUpdateTime = new Date().toLocaleTimeString()
         }
       } catch (error) {
@@ -250,28 +260,33 @@ export default {
         return
       }
       
-      const cmd = this.status.systemPowered ? 'power_off' : 'power_on'
-      const confirmText = this.status.systemPowered ? '确定要关机吗？' : '确定要开机吗？'
+      const isPowered = this.status.systemPowered
+      const cmd = isPowered ? 'power_off' : 'power_on'
+      const confirmText = isPowered ? '确定要关机吗？\n关机后设备保持网络连接，可远程开机。' : '确定要开机吗？'
       
       uni.showModal({
         title: '确认操作',
         content: confirmText,
-        success: async (res) => {
-          if (!res.confirm) return
-          
-          try {
-            const result = await sendControlCommand(this.deviceKey, cmd, {})
-            if (result.success) {
-              this.status.systemPowered = !this.status.systemPowered
-              uni.showToast({ title: cmd === 'power_on' ? '开机成功' : '关机成功', icon: 'success' })
-            } else {
-              uni.showToast({ title: result.message || '操作失败', icon: 'none' })
-            }
-          } catch (error) {
-            uni.showToast({ title: '操作失败', icon: 'none' })
-          }
+        success: (modalRes) => {
+          if (!modalRes.confirm) return
+          this.executePowerCmd(cmd)
         }
       })
+    },
+    
+    async executePowerCmd(cmd) {
+      try {
+        const result = await sendControlCommand(this.deviceKey, cmd, {})
+        if (result.success) {
+          this.status.systemPowered = cmd === 'power_on'
+          uni.showToast({ title: cmd === 'power_on' ? '开机成功' : '关机成功', icon: 'success' })
+          setTimeout(() => this.loadStatus(), 1000)
+        } else {
+          uni.showToast({ title: result.message || '操作失败', icon: 'none' })
+        }
+      } catch (error) {
+        uni.showToast({ title: '操作失败', icon: 'none' })
+      }
     }
   }
 }

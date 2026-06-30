@@ -108,5 +108,93 @@
       "servoMoving": true,
       "systemPowered": true
     }
+  },
+  {
+    "time": 1782786196,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782786715,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782786768,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782786903,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782787134,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782787648,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782787713,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782787784,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
   }
 ]
