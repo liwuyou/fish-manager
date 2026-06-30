@@ -1,0 +1,112 @@
+[
+  {
+    "time": 1782760826,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782760834,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782760842,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782760853,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782784356,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782784363,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782785098,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782785487,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782785494,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782785508,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  }
+]

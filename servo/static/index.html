@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>养鱼生态箱</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; }
+.container { max-width: 500px; margin: 0 auto; padding: 15px; }
+.card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.card h3 { font-size: 16px; margin-bottom: 12px; color: #2c3e50; }
+.btn { display: inline-block; padding: 10px 16px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: #3498db; color: #fff; }
+.btn-primary:active { background: #2980b9; }
+.btn-success { background: #27ae60; color: #fff; }
+.btn-success:active { background: #219a52; }
+.btn-danger { background: #e74c3c; color: #fff; }
+.btn-danger:active { background: #c0392b; }
+.btn-warning { background: #f39c12; color: #fff; }
+.btn-warning:active { background: #d68910; }
+.btn-secondary { background: #95a5a6; color: #fff; }
+.btn-secondary:active { background: #7f8c8d; }
+.btn-block { display: block; width: 100%; margin-top: 8px; }
+.row { display: flex; gap: 8px; margin-bottom: 8px; }
+.row .btn { flex: 1; }
+input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; margin-bottom: 10px; }
+label { font-size: 13px; color: #666; display: block; margin-bottom: 4px; }
+.status-line { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
+.status-line .label { color: #999; }
+.status-line .value { font-weight: 500; }
+.online { color: #27ae60; }
+.offline { color: #e74c3c; }
+.device-item { padding: 12px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+.device-item:active { background: #f8f9fa; }
+.device-name { font-weight: 500; margin-bottom: 4px; }
+.device-info { font-size: 12px; color: #999; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.dot.online { background: #27ae60; }
+.dot.offline { background: #e74c3c; }
+.level-btns { display: flex; gap: 6px; }
+.level-btns .btn { flex: 1; padding: 8px 0; font-size: 13px; }
+.level-btns .btn.active { background: #3498db; color: #fff; }
+.level-btns .btn:not(.active) { background: #ecf0f1; color: #666; }
+.sensor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sensor-box { background: #f8f9fa; border-radius: 8px; padding: 12px; text-align: center; }
+.sensor-box .value { font-size: 20px; font-weight: bold; color: #2c3e50; }
+.sensor-box .label { font-size: 12px; color: #999; margin-top: 4px; }
+.back-btn { background: none; border: none; color: #3498db; font-size: 14px; cursor: pointer; padding: 5px 0; margin-bottom: 10px; }
+.tabs { display: flex; background: #fff; border-radius: 12px; padding: 4px; margin-bottom: 12px; }
+.tab { flex: 1; text-align: center; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 14px; color: #666; }
+.tab.active { background: #3498db; color: #fff; }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+.header h2 { font-size: 18px; }
+.toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 14px; z-index: 1000; opacity: 0; transition: opacity 0.3s; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div id="toast" class="toast"></div>
+    
+    <div id="loginPage">
+        <div class="card">
+            <h3>🔐 用户登录</h3>
+            <label>手机号</label>
+            <input type="tel" id="phoneInput" placeholder="请输入手机号" maxlength="11">
+            <button class="btn btn-primary btn-block" onclick="login()">登录</button>
+        </div>
+    </div>
+    
+    <div id="deviceListPage" style="display:none;">
+        <div class="header">
+            <h2>📱 我的设备</h2>
+            <button class="btn btn-primary" style="padding:6px 12px;font-size:13px;" onclick="showBindPage()">添加设备</button>
+        </div>
+        <div id="deviceList"></div>
+        <div style="text-align:center;margin-top:20px;">
+            <button class="btn btn-secondary" style="padding:6px 12px;font-size:13px;" onclick="logout()">退出登录</button>
+        </div>
+    </div>
+    
+    <div id="bindPage" style="display:none;">
+        <button class="back-btn" onclick="showDeviceList()">← 返回</button>
+        <div class="card">
+            <h3>➕ 添加设备</h3>
+            <label>设备密钥（8位）</label>
+            <input type="text" id="keyInput" placeholder="请输入设备密钥" maxlength="8">
+            <button class="btn btn-success btn-block" onclick="bindDevice()">绑定设备</button>
+            <p style="font-size:12px;color:#999;margin-top:10px;">提示：密钥可在设备OLED屏幕或配置页面查看</p>
+        </div>
+    </div>
+    
+    <div id="controlPage" style="display:none;">
+        <button class="back-btn" onclick="showDeviceList()">← 返回</button>
+        
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;">设备控制</h3>
+                <span id="deviceStatus"><span class="dot offline"></span>离线</span>
+            </div>
+            <div class="device-info" style="margin-top:8px;">
+                密钥: <span id="currentDeviceKey"></span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>💧 水泵1</h3>
+            <div class="level-btns" id="pump1Btns">
+                <button class="btn active" onclick="setPump(1,0)">关</button>
+                <button class="btn" onclick="setPump(1,1)">一档</button>
+                <button class="btn" onclick="setPump(1,2)">二档</button>
+                <button class="btn" onclick="setPump(1,3)">三档</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>💧 水泵2</h3>
+            <div class="level-btns" id="pump2Btns">
+                <button class="btn active" onclick="setPump(2,0)">关</button>
+                <button class="btn" onclick="setPump(2,1)">一档</button>
+                <button class="btn" onclick="setPump(2,2)">二档</button>
+                <button class="btn" onclick="setPump(2,3)">三档</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>💡 灯光</h3>
+            <div class="level-btns" id="lightBtns">
+                <button class="btn active" onclick="setLight(0)">关</button>
+                <button class="btn" onclick="setLight(1)">一档</button>
+                <button class="btn" onclick="setLight(2)">二档</button>
+                <button class="btn" onclick="setLight(3)">三档</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>🔄 舵机</h3>
+            <button class="btn btn-warning btn-block" onclick="triggerServo()">启动清扫</button>
+        </div>
+        
+        <div class="card">
+            <h3>🌡️ 传感器</h3>
+            <div class="sensor-grid">
+                <div class="sensor-box">
+                    <div class="value" id="tempValue">--</div>
+                    <div class="label">水温</div>
+                </div>
+                <div class="sensor-box">
+                    <div class="value" id="wqValue">--</div>
+                    <div class="label">水质</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>⚙️ 系统</h3>
+            <div class="status-line">
+                <span class="label">系统状态</span>
+                <span class="value" id="powerStatus">开机</span>
+            </div>
+            <div class="row">
+                <button class="btn btn-success" id="powerOnBtn" onclick="powerOn()" style="display:none;">开机</button>
+                <button class="btn btn-danger" id="powerOffBtn" onclick="powerOff()">关机</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_BASE = '';
+let currentPhone = localStorage.getItem('phone') || '';
+let currentDeviceKey = '';
+let statusTimer = null;
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function showPage(id) {
+    ['loginPage','deviceListPage','bindPage','controlPage'].forEach(p => {
+        document.getElementById(p).style.display = 'none';
+    });
+    document.getElementById(id).style.display = 'block';
+}
+
+function login() {
+    const phone = document.getElementById('phoneInput').value.trim();
+    if (!phone || phone.length !== 11) {
+        showToast('请输入正确的手机号');
+        return;
+    }
+    currentPhone = phone;
+    localStorage.setItem('phone', phone);
+    loadDevices();
+}
+
+function logout() {
+    localStorage.removeItem('phone');
+    currentPhone = '';
+    showPage('loginPage');
+}
+
+function showBindPage() {
+    document.getElementById('keyInput').value = '';
+    showPage('bindPage');
+}
+
+async function bindDevice() {
+    const key = document.getElementById('keyInput').value.trim().toUpperCase();
+    if (!key || key.length !== 8) {
+        showToast('请输入8位设备密钥');
+        return;
+    }
+    
+    try {
+        const res = await fetch(API_BASE + '/api/bind', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({phone: currentPhone, device_key: key})
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('绑定成功');
+            setTimeout(loadDevices, 500);
+        } else {
+            showToast(data.message || '绑定失败');
+        }
+    } catch(e) {
+        showToast('网络错误');
+    }
+}
+
+async function loadDevices() {
+    if (!currentPhone) {
+        showPage('loginPage');
+        return;
+    }
+    document.getElementById('phoneInput').value = currentPhone;
+    
+    try {
+        const res = await fetch(API_BASE + '/api/devices?phone=' + currentPhone);
+        const data = await res.json();
+        const devices = data.devices || data || [];
+        const list = document.getElementById('deviceList');
+        if (devices.length === 0) {
+            list.innerHTML = '<div class="card" style="text-align:center;color:#999;padding:30px;">暂无设备<br>点击右上角添加</div>';
+        } else {
+            list.innerHTML = devices.map(d => `
+                <div class="device-item" onclick="openDevice('${d.device_key}')">
+                    <div class="device-name">
+                        <span class="dot ${d.online ? 'online' : 'offline'}"></span>
+                        养鱼生态箱
+                    </div>
+                    <div class="device-info">密钥: ${d.device_key}</div>
+                    <button class="btn btn-danger" style="margin-top:8px;font-size:12px;padding:4px 8px;" onclick="event.stopPropagation();unbindDevice('${d.device_key}')">删除</button>
+                </div>
+            `).join('');
+        }
+        showPage('deviceListPage');
+    } catch(e) {
+        showToast('加载失败');
+    }
+}
+
+async function unbindDevice(key) {
+    if (!confirm('确定要删除这个设备吗？')) return;
+    
+    try {
+        const res = await fetch(API_BASE + '/api/unbind', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({phone: currentPhone, device_key: key})
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('删除成功');
+            loadDevices();
+        } else {
+            showToast(data.message || '删除失败');
+        }
+    } catch(e) {
+        showToast('网络错误');
+    }
+}
+
+function openDevice(key) {
+    currentDeviceKey = key;
+    document.getElementById('currentDeviceKey').textContent = key;
+    showPage('controlPage');
+    startStatusPolling();
+}
+
+function showDeviceList() {
+    stopStatusPolling();
+    loadDevices();
+}
+
+function startStatusPolling() {
+    stopStatusPolling();
+    fetchStatus();
+    statusTimer = setInterval(fetchStatus, 3000);
+}
+
+function stopStatusPolling() {
+    if (statusTimer) {
+        clearInterval(statusTimer);
+        statusTimer = null;
+    }
+}
+
+async function fetchStatus() {
+    try {
+        const res = await fetch(API_BASE + '/api/status?device_key=' + currentDeviceKey);
+        const data = await res.json();
+        
+        const statusEl = document.getElementById('deviceStatus');
+        if (data.online) {
+            statusEl.innerHTML = '<span class="dot online"></span>在线';
+            statusEl.className = 'online';
+        } else {
+            statusEl.innerHTML = '<span class="dot offline"></span>离线';
+            statusEl.className = 'offline';
+        }
+        
+        const s = data.status || {};
+        updateLevelBtns('pump1Btns', s.pwm1Level || 0);
+        updateLevelBtns('pump2Btns', s.pwm2Level || 0);
+        updateLevelBtns('lightBtns', s.pwm3Level || 0);
+        
+        document.getElementById('tempValue').textContent = s.adcTempVoltage ? s.adcTempVoltage.toFixed(2) + 'V' : '--';
+        document.getElementById('wqValue').textContent = s.adcWQVoltage ? s.adcWQVoltage.toFixed(2) + 'V' : '--';
+        
+    } catch(e) {}
+}
+
+function updateLevelBtns(id, level) {
+    const btns = document.querySelectorAll('#' + id + ' .btn');
+    btns.forEach((b, i) => {
+        b.classList.toggle('active', i === level);
+    });
+}
+
+async function sendCmd(cmd, params) {
+    try {
+        const res = await fetch(API_BASE + '/api/control', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                device_key: currentDeviceKey,
+                cmd: cmd,
+                params: params || {}
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('指令已发送');
+            setTimeout(fetchStatus, 1000);
+        } else {
+            showToast(data.message || '发送失败');
+        }
+    } catch(e) {
+        showToast('网络错误');
+    }
+}
+
+function setPump(num, level) {
+    sendCmd('set_pump', {pump: num, level: level});
+}
+
+function setLight(level) {
+    sendCmd('set_light', {level: level});
+}
+
+function triggerServo() {
+    sendCmd('trigger_servo', {});
+}
+
+function powerOff() {
+    if (confirm('确定要关机吗？')) {
+        sendCmd('power_off', {});
+    }
+}
+
+if (currentPhone) {
+    loadDevices();
+} else {
+    showPage('loginPage');
+}
+</script>
+</body>
+</html>

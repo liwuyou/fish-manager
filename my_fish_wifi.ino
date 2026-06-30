@@ -2,6 +2,9 @@
 #include <EEPROM.h>
 #include <U8g2lib.h>
 #include <Wire.h>
+#include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
 
 // ==================== 前置信息 ====================
 // ESP32-wroom, 128MB flash, 4MB psram, 用于控制养鱼生态箱
@@ -74,6 +77,14 @@
 #define SERIAL_BAUDRATE 115200   // 串口波特率
 #define SERIAL_DEBUG_ENABLE true // 是否开启串口调试
 
+// ==================== WiFi参数 ====================
+#define AP_TIMEOUT 60000         // AP无连接超时时间 (ms)，1分钟
+#define AP_CHANNEL 6             // AP信道
+#define MAX_CONNECTIONS 1        // 最大连接数
+#define DNS_PORT 53              // DNS端口
+#define EEPROM_PHONE_ADDR 0      // 手机号存储地址
+#define EEPROM_WIFI_ADDR 50      // WiFi配置存储地址
+
 // ==================== 全局变量 ====================
 bool systemPowered = true;        // 系统开关状态（默认开机）
 bool relay1State = false;        // 继电器状态（12V/5V共用EN）
@@ -120,9 +131,22 @@ float adcCorrectedVoltage = 0.0;
 // OLED状态
 bool oledInitialized = false;
 
+// WiFi状态
+bool wifiAPEnabled = false;       // AP模式是否开启
+bool wifiConnected = false;       // 是否已连接家庭WiFi
+unsigned long apStartTime = 0;    // AP开启时间
+unsigned long apLastConnectedTime = 0; // 最后有设备连接的时间
+String deviceMAC = "";            // 设备MAC地址
+String deviceKey = "";            // 设备密钥（MAC后8位）
+String phoneNumber = "";          // 用户手机号
+String homeWiFiSSID = "";         // 家庭WiFi名称
+String homeWiFiPassword = "";     // 家庭WiFi密码
+
 // 全局对象
 Servo myServo;
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+WebServer server(80);
+DNSServer dnsServer;
 
 // ==================== 宏定义 ====================
 #if SERIAL_DEBUG_ENABLE
@@ -141,6 +165,18 @@ void updateServo();
 void playBuzzerTone(int freq, int duration);
 void powerOnSystem();
 void powerOffSystem();
+void initDeviceID();
+void startWiFiAP();
+void stopWiFiAP();
+void handleWiFiAPTimeout();
+void connectToHomeWiFi();
+void connectToHomeWiFiBackground();
+void handleRoot();
+void handleSaveConfig();
+void handleWiFiScan();
+void handleStatus();
+void handleCaptivePortal();
+void initWebServer();
 
 // ==================== 蜂鸣器控制 ====================
 void playBuzzerTone(int freq, int duration) {
@@ -188,6 +224,10 @@ void powerOffSystem() {
   ledcWrite(PWM2_PIN, 0);
   ledcWrite(PWM3_PIN, 0);
   
+  // 关闭WiFi
+  stopWiFiAP();
+  WiFi.disconnect();
+  
   // 释放I2C总线（避免OLED断电后干扰ESP32）
   Wire.end();
   pinMode(OLED_SDA_PIN, INPUT_PULLUP);
@@ -201,6 +241,309 @@ void powerOffSystem() {
   
   playBuzzerTone(BUZZER_TONE_ERROR, BUZZER_DURATION_SHORT);
   SerialPrintln("[POWER] 系统关机");
+}
+
+// ==================== 设备ID初始化 ====================
+void initDeviceID() {
+  // 先设置WiFi为AP模式，才能获取真实的MAC地址
+  WiFi.mode(WIFI_AP_STA);
+  delay(100);
+  deviceMAC = WiFi.macAddress();
+  
+  String macWithoutColons = deviceMAC;
+  macWithoutColons.replace(":", "");
+  
+  if (macWithoutColons.length() >= 8) {
+    deviceKey = macWithoutColons.substring(macWithoutColons.length() - 8);
+  } else {
+    deviceKey = "00000000";
+  }
+  
+  SerialPrint("[DEVICE] MAC地址: ");
+  SerialPrintln(deviceMAC);
+  SerialPrint("[DEVICE] 设备密钥: ");
+  SerialPrintln(deviceKey);
+}
+
+// ==================== WiFi AP控制 ====================
+void startWiFiAP() {
+  if (wifiAPEnabled) return;
+  
+  String apSSID = "fish-manager-" + deviceKey;
+  
+  WiFi.mode(WIFI_AP_STA);
+  // 设置WiFi密码为12345678
+  WiFi.softAP(apSSID.c_str(), "12345678");
+  
+  delay(500);
+  
+  // DNS所有域名都解析到AP IP
+  IPAddress apIP = WiFi.softAPIP();
+  dnsServer.start(DNS_PORT, "*", apIP);
+  
+  initWebServer();
+  server.begin();
+  
+  wifiAPEnabled = true;
+  apStartTime = millis();
+  apLastConnectedTime = millis();
+  
+  SerialPrint("[WiFi] AP启动: ");
+  SerialPrintln(apSSID);
+  SerialPrint("[WiFi] AP密码: 12345678");
+  SerialPrint("[WiFi] AP地址: ");
+  SerialPrintln(apIP.toString());
+}
+
+void stopWiFiAP() {
+  if (!wifiAPEnabled) return;
+  
+  dnsServer.stop();
+  server.stop();
+  
+  // 关闭AP模式
+  WiFi.softAPdisconnect(true);
+  
+  // 如果已连接家庭WiFi，切换到STA模式；否则完全关闭WiFi
+  if (wifiConnected && WiFi.status() == WL_CONNECTED) {
+    WiFi.mode(WIFI_STA);
+  } else {
+    WiFi.mode(WIFI_OFF);
+    wifiConnected = false;
+  }
+  
+  wifiAPEnabled = false;
+  
+  SerialPrintln("[WiFi] AP已关闭");
+}
+
+void handleWiFiAPTimeout() {
+  if (!wifiAPEnabled) return;
+  
+  int stationCount = WiFi.softAPgetStationNum();
+  
+  if (stationCount > 0) {
+    apLastConnectedTime = millis();
+    return;
+  }
+  
+  unsigned long timeoutReference = (apStartTime == apLastConnectedTime) ? apStartTime : apLastConnectedTime;
+  
+  if (millis() - timeoutReference >= AP_TIMEOUT) {
+    stopWiFiAP();
+    SerialPrintln("[WiFi] AP超时关闭");
+  }
+}
+
+void connectToHomeWiFiBackground() {
+  if (homeWiFiSSID.isEmpty()) return;
+  if (WiFi.status() == WL_CONNECTED) return;
+  
+  SerialPrint("[WiFi] 后台连接家庭WiFi: ");
+  SerialPrintln(homeWiFiSSID);
+  WiFi.begin(homeWiFiSSID.c_str(), homeWiFiPassword.c_str());
+}
+
+void connectToHomeWiFi() {
+  if (homeWiFiSSID.isEmpty()) return;
+  
+  SerialPrint("[WiFi] 连接家庭WiFi: ");
+  SerialPrintln(homeWiFiSSID);
+  
+  WiFi.begin(homeWiFiSSID.c_str(), homeWiFiPassword.c_str());
+  
+  unsigned long startTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startTime < 10000) {
+    delay(500);
+    SerialPrint(".");
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    wifiConnected = true;
+    SerialPrintln("");
+    SerialPrint("[WiFi] 连接成功, IP: ");
+    SerialPrintln(WiFi.localIP().toString());
+    playBuzzerTone(BUZZER_TONE_SUCCESS, BUZZER_DURATION_SHORT);
+    // 注意：这里不再关闭AP，AP会保持开启直到超时
+  } else {
+    wifiConnected = false;
+    SerialPrintln("");
+    SerialPrintln("[WiFi] 连接失败");
+    playBuzzerTone(BUZZER_TONE_ERROR, BUZZER_DURATION_SHORT);
+  }
+}
+
+// ==================== Web服务器 ====================
+void initWebServer() {
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/save", HTTP_POST, handleSaveConfig);
+  server.on("/status", HTTP_GET, handleStatus);
+  server.on("/scan", HTTP_GET, handleWiFiScan);
+  
+  // Captive Portal常见验证URL
+  server.on("/generate_204", HTTP_GET, handleCaptivePortal);
+  server.on("/gen_204", HTTP_GET, handleCaptivePortal);
+  server.on("/hotspot-detect.html", HTTP_GET, handleCaptivePortal);
+  server.on("/ncsi.txt", HTTP_GET, handleCaptivePortal);
+  server.on("/connectivitycheck.gstatic.com", HTTP_GET, handleCaptivePortal);
+  server.on("/captive.apple.com", HTTP_GET, handleCaptivePortal);
+  
+  // Captive Portal: 捕获所有其他请求，重定向到首页
+  server.onNotFound(handleCaptivePortal);
+}
+
+void handleCaptivePortal() {
+  server.sendHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
+  server.send(302, "text/plain", "Redirect");
+}
+
+void handleWiFiScan() {
+  String json = "[";
+  int n = WiFi.scanNetworks();
+  for (int i = 0; i < n; i++) {
+    if (i > 0) json += ",";
+    json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + WiFi.RSSI(i) + "}";
+  }
+  json += "]";
+  WiFi.scanDelete();
+  server.send(200, "application/json", json);
+}
+
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'>";
+  html += "<title>设备配置</title><style>";
+  html += "body{font-family:sans-serif;margin:20px;background:#f0f0f0;}";
+  html += ".card{background:white;border-radius:8px;padding:20px;margin:10px 0;box-shadow:0 2px 4px rgba(0,0,0,0.1);}";
+  html += "h2{color:#333;margin-top:0;}input,select{width:100%;padding:10px;margin:8px 0;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;}";
+  html += "button{background:#4CAF50;color:white;padding:12px 20px;border:none;border-radius:4px;cursor:pointer;width:100%;font-size:16px;}";
+  html += "button:hover{background:#45a049;}.info{color:#666;font-size:14px;margin-bottom:15px;}";
+  html += ".code{font-family:monospace;color:#e74c3c;background:#f9f9f9;padding:5px;border-radius:3px;}";
+  html += ".success{background:#d4edda;color:#155724;padding:10px;border-radius:4px;margin:10px 0;}";
+  html += ".loading{color:#666;text-align:center;padding:20px;}";
+  html += "</style></head><body>";
+  
+  html += "<div class='card'><h2>🔐 设备信息</h2>";
+  html += "<div class='info'><b>设备唯一码:</b><br><span class='code'>" + deviceMAC + "</span></div>";
+  html += "<div class='info'><b>设备密钥:</b><br><span class='code'>" + deviceKey + "</span></div>";
+  html += "</div>";
+  
+  html += "<div class='card'><h2>📱 用户配置</h2>";
+  html += "<form id='configForm' action='/save' method='POST'>";
+  html += "<label>手机号:</label><input type='tel' name='phone' placeholder='请输入手机号' value='" + phoneNumber + "' maxlength='11' required><br>";
+  html += "<label>选择家庭WiFi:</label>";
+  html += "<select name='ssid' id='wifiSelect' onchange='onSSIDChange()'>";
+  html += "<option value=''>-- 请选择WiFi --</option>";
+  html += "</select>";
+  html += "<div id='selectedSSID' style='margin:10px 0;color:#666;'></div>";
+  html += "<label>WiFi密码:</label><input type='password' name='password' id='password' placeholder='请输入WiFi密码' required><br>";
+  html += "<button type='submit' id='submitBtn'>保存配置</button>";
+  html += "</form>";
+  html += "<div id='loadingMsg' class='loading' style='display:none;'>正在扫描WiFi...</div>";
+  html += "</div>";
+  
+  html += "<div id='successMsg' class='card success' style='display:none;'>";
+  html += "<h2>✅ 配置已保存</h2>";
+  html += "<div id='successDetail'></div>";
+  html += "</div>";
+  
+  if (wifiConnected) {
+    html += "<div class='card' style='background:#d4edda;color:#155724;'><h2>✅ WiFi已连接</h2>";
+    html += "<div class='info'>IP地址: " + WiFi.localIP().toString() + "</div>";
+    html += "</div>";
+  }
+  
+  html += "<script>";
+  html += "function scanWiFi(){fetch('/scan').then(r=>r.json()).then(d=>{";
+  html += "var s=document.getElementById('wifiSelect');";
+  html += "d.forEach(function(w){var o=document.createElement('option');o.value=w.ssid;o.text=w.ssid+(w.rssi>-70?' (弱)':w.rssi>-50?' (中)':' (强)');if(w.ssid=='" + homeWiFiSSID + "')o.selected=true;s.appendChild(o);});";
+  html += "document.getElementById('loadingMsg').style.display='none';";
+  html += "if('" + homeWiFiSSID + "'){document.getElementById('selectedSSID').innerHTML='已选: <b>" + homeWiFiSSID + "</b>';document.getElementById('password').value='" + homeWiFiPassword + "';}";
+  html += "});}";
+  html += "function onSSIDChange(){var s=document.getElementById('wifiSelect');document.getElementById('selectedSSID').innerHTML='已选: <b>'+s.value+'</b>';}";
+  html += "document.getElementById('configForm').onsubmit=function(){document.getElementById('submitBtn').disabled=true;document.getElementById('submitBtn').innerText='保存中...';return true;};";
+  html += "scanWiFi();";
+  html += "</script></body></html>";
+  
+  server.send(200, "text/html; charset=UTF-8", html);
+}
+
+void handleSaveConfig() {
+  if (server.hasArg("phone")) {
+    phoneNumber = server.arg("phone");
+    EEPROM.begin(256);
+    for (int i = 0; i < 20; i++) {
+      EEPROM.write(EEPROM_PHONE_ADDR + i, 0);
+    }
+    for (int i = 0; i < phoneNumber.length() && i < 20; i++) {
+      EEPROM.write(EEPROM_PHONE_ADDR + i, phoneNumber[i]);
+    }
+    EEPROM.commit();
+    EEPROM.end();
+    SerialPrint("[CONFIG] 手机号已保存: ");
+    SerialPrintln(phoneNumber);
+  }
+  
+  if (server.hasArg("ssid")) {
+    homeWiFiSSID = server.arg("ssid");
+  }
+  
+  if (server.hasArg("password")) {
+    homeWiFiPassword = server.arg("password");
+  }
+  
+  if (!homeWiFiSSID.isEmpty()) {
+    EEPROM.begin(256);
+    for (int i = 0; i < 100; i++) {
+      EEPROM.write(EEPROM_WIFI_ADDR + i, 0);
+    }
+    int addr = EEPROM_WIFI_ADDR;
+    for (int i = 0; i < homeWiFiSSID.length() && i < 50; i++) {
+      EEPROM.write(addr++, homeWiFiSSID[i]);
+    }
+    EEPROM.write(addr++, 0);
+    for (int i = 0; i < homeWiFiPassword.length() && i < 50; i++) {
+      EEPROM.write(addr++, homeWiFiPassword[i]);
+    }
+    EEPROM.commit();
+    EEPROM.end();
+    SerialPrint("[CONFIG] WiFi配置已保存");
+  }
+  
+  // 显示成功页面
+  String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'>";
+  html += "<title>配置完成</title><style>";
+  html += "body{font-family:sans-serif;margin:20px;background:#f0f0f0;display:flex;justify-content:center;align-items:center;min-height:100vh;}";
+  html += ".card{background:white;border-radius:8px;padding:30px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.1);max-width:400px;}";
+  html += "h2{color:#27ae60;margin-top:0;}p{color:#666;line-height:1.6;}";
+  html += ".info{background:#f8f9fa;padding:10px;border-radius:4px;margin:15px 0;}";
+  html += ".btn{background:#4CAF50;color:white;padding:12px 24px;border:none;border-radius:4px;cursor:pointer;font-size:16px;text-decoration:none;display:inline-block;margin-top:10px;}";
+  html += ".btn:hover{background:#45a049;}";
+  html += "</style></head><body>";
+  html += "<div class='card'>";
+  html += "<h2>✅ 配置已保存</h2>";
+  html += "<div class='info'>";
+  html += "<p>手机号: <b>" + phoneNumber + "</b></p>";
+  html += "<p>WiFi: <b>" + homeWiFiSSID + "</b></p>";
+  html += "</div>";
+  html += "<p>ESP32正在尝试连接家庭WiFi...</p>";
+  html += "<p style='font-size:12px;color:#999;'>如果连接成功，OLED将显示 Connected</p>";
+  html += "<a href='/' class='btn'>返回配置页</a>";
+  html += "</div></body></html>";
+  
+  server.send(200, "text/html; charset=UTF-8", html);
+  
+  // 延迟连接WiFi，让用户先看到成功消息
+  delay(500);
+  connectToHomeWiFi();
+}
+
+void handleStatus() {
+  char json[200];
+  snprintf(json, sizeof(json), "{\"wifiAPEnabled\":%s,\"wifiConnected\":%s,\"deviceKey\":\"%s\"}", 
+           wifiAPEnabled ? "true" : "false", 
+           wifiConnected ? "true" : "false",
+           deviceKey.c_str());
+  server.send(200, "application/json", json);
 }
 
 // ==================== ADC采样 ====================
@@ -453,6 +796,18 @@ void updateOLED() {
   u8g2.print(adcWQVoltage, 1);
   u8g2.print("V");
   
+  // 第四行: WiFi状态
+  u8g2.setCursor(0, 46);
+  u8g2.print("WiFi:");
+  if (wifiConnected) {
+    u8g2.print("Connected");
+  } else if (wifiAPEnabled) {
+    u8g2.print("AP:");
+    u8g2.print(deviceKey.substring(0, 4));
+  } else {
+    u8g2.print("Off");
+  }
+  
   u8g2.sendBuffer();
 }
 
@@ -512,6 +867,45 @@ void setup() {
     SerialPrintln("[OLED] 初始化成功");
   }
   
+  // 初始化设备ID（无论开机与否都执行）
+  initDeviceID();
+  
+  // 读取EEPROM配置
+  EEPROM.begin(256);
+  
+  // 读取手机号
+  phoneNumber = "";
+  for (int i = 0; i < 20; i++) {
+    char c = EEPROM.read(EEPROM_PHONE_ADDR + i);
+    if (c == 0) break;
+    phoneNumber += c;
+  }
+  if (phoneNumber.length() > 0) {
+    SerialPrint("[CONFIG] 读取手机号: ");
+    SerialPrintln(phoneNumber);
+  }
+  
+  // 读取WiFi配置
+  homeWiFiSSID = "";
+  homeWiFiPassword = "";
+  int addr = EEPROM_WIFI_ADDR;
+  for (int i = 0; i < 50; i++) {
+    char c = EEPROM.read(addr++);
+    if (c == 0) break;
+    homeWiFiSSID += c;
+  }
+  for (int i = 0; i < 50; i++) {
+    char c = EEPROM.read(addr++);
+    if (c == 0) break;
+    homeWiFiPassword += c;
+  }
+  if (homeWiFiSSID.length() > 0) {
+    SerialPrint("[CONFIG] 读取WiFi: ");
+    SerialPrintln(homeWiFiSSID);
+  }
+  
+  EEPROM.end();
+  
   SerialPrintln("\n==========================================");
   SerialPrintln("  系统就绪");
   SerialPrintln("  默认处于开机状态");
@@ -532,6 +926,16 @@ void setup() {
       u8g2.setFont(u8g2_font_ncenB08_tr);
       oledInitialized = true;
       SerialPrintln("[OLED] 开机后初始化成功");
+    }
+    
+    // 总是先启动AP（让用户可以随时切换网络）
+    // 如果已有WiFi配置，ESP32也会同时尝试连接家庭WiFi
+    startWiFiAP();
+    
+    // 如果已有家庭WiFi配置，同时尝试后台连接（不阻塞）
+    if (!homeWiFiSSID.isEmpty()) {
+      SerialPrintln("[WiFi] 已保存WiFi配置，正在后台连接...");
+      connectToHomeWiFiBackground();
     }
   } else {
     digitalWrite(RELAY_PIN, LOW);
@@ -555,11 +959,26 @@ void loop() {
     readADC();
   }
   
-  // OLED显示更新（每200ms）
+  // OLED显示更新（每500ms）
   static unsigned long lastOLEDUpdate = 0;
-  if (millis() - lastOLEDUpdate > 200) {
+  if (millis() - lastOLEDUpdate > 500) {
     lastOLEDUpdate = millis();
     updateOLED();
+  }
+  
+  // WiFi AP超时检测
+  handleWiFiAPTimeout();
+  
+  // 检查家庭WiFi连接状态
+  if (!homeWiFiSSID.isEmpty() && WiFi.status() == WL_CONNECTED && !wifiConnected) {
+    wifiConnected = true;
+    SerialPrintln("[WiFi] 家庭WiFi连接成功");
+  }
+  
+  // DNS和Web服务器处理（只要AP开启就一直处理）
+  if (wifiAPEnabled) {
+    dnsServer.processNextRequest();
+    server.handleClient();
   }
   
   // 调试信息输出（每5秒）
@@ -583,6 +1002,10 @@ void loop() {
     SerialPrint("水质电压: ");
     SerialPrint(adcWQVoltage);
     SerialPrintln("V");
+    SerialPrint("WiFi AP: ");
+    SerialPrintln(wifiAPEnabled ? "开启" : "关闭");
+    SerialPrint("WiFi连接: ");
+    SerialPrintln(wifiConnected ? "已连接" : "未连接");
     SerialPrint("空闲内存: ");
     SerialPrint(ESP.getFreeHeap() / 1024);
     SerialPrintln(" KB");
