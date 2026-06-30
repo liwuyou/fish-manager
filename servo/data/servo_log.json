@@ -207,5 +207,27 @@
       "servoMoving": true,
       "systemPowered": true
     }
+  },
+  {
+    "time": 1782791240,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1782802826,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "servoMoving": true,
+      "systemPowered": true
+    }
   }
 ]
