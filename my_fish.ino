@@ -582,6 +582,7 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
       ledcWrite(PWM2_PIN, pwmValues[pwm2Level]);
     }
     wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus(); // 立即发送完整状态
     
   } else if (cmd == "set_light") {
     int level = params["level"] | 0;
@@ -589,6 +590,7 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
     pwm3Level = level;
     ledcWrite(PWM3_PIN, pwmValues[pwm3Level]);
     wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus(); // 立即发送完整状态
     
   } else if (cmd == "trigger_servo") {
     if (servoMoving) {
@@ -602,10 +604,12 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
   } else if (cmd == "power_off") {
     powerOffSystem();
     wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus(); // 立即发送完整状态
     
   } else if (cmd == "power_on") {
     powerOnSystem();
     wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus(); // 立即发送完整状态
     
   } else {
     wsSendCmdResult(cmdId, cmd, false, "未知命令");

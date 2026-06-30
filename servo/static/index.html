@@ -172,6 +172,7 @@ const API_BASE = '';
 let currentPhone = localStorage.getItem('phone') || '';
 let currentDeviceKey = '';
 let statusTimer = null;
+let pendingRefresh = false;
 
 function showToast(msg) {
     const t = document.getElementById('toast');
@@ -313,6 +314,8 @@ function stopStatusPolling() {
 }
 
 async function fetchStatus() {
+    if (pendingRefresh) return;
+    
     try {
         const res = await fetch(API_BASE + '/api/status?device_key=' + currentDeviceKey);
         const data = await res.json();
@@ -365,7 +368,11 @@ async function sendCmd(cmd, params) {
         const data = await res.json();
         if (data.success) {
             showToast('指令已发送');
-            setTimeout(fetchStatus, 1000);
+            pendingRefresh = true;
+            setTimeout(() => {
+                pendingRefresh = false;
+                fetchStatus();
+            }, 3000);
         } else {
             showToast(data.message || '发送失败');
         }

@@ -4,14 +4,14 @@
     "mac": "3C:8A:1F:0C:06:04",
     "phone": "18154385008",
     "online": true,
-    "last_online": 1782788378,
+    "last_online": 1782789141,
     "status": {
       "pwm1Level": 0,
       "pwm2Level": 0,
       "pwm3Level": 0,
       "servoMoving": false,
       "adcWQVoltage": 3.3,
-      "adcTempVoltage": 0,
+      "adcTempVoltage": 0.193407,
       "systemPowered": true
     }
   },

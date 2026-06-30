@@ -169,6 +169,8 @@ export default {
   },
   methods: {
     async loadStatus() {
+      if (this.pendingRefresh) return
+      
       try {
         const res = await getDeviceStatus(this.deviceKey)
         if (res.success) {
@@ -207,6 +209,11 @@ export default {
         const res = await sendControlCommand(this.deviceKey, 'set_pump', { pump, level })
         if (res.success) {
           this.status[`pwm${pump}Level`] = level
+          this.pendingRefresh = true
+          setTimeout(() => {
+            this.pendingRefresh = false
+            this.loadStatus()
+          }, 3000)
           uni.showToast({ title: '设置成功', icon: 'success' })
         } else {
           uni.showToast({ title: res.message || '设置失败', icon: 'none' })
@@ -226,6 +233,11 @@ export default {
         const res = await sendControlCommand(this.deviceKey, 'set_light', { level })
         if (res.success) {
           this.status.pwm3Level = level
+          this.pendingRefresh = true
+          setTimeout(() => {
+            this.pendingRefresh = false
+            this.loadStatus()
+          }, 3000)
           uni.showToast({ title: '设置成功', icon: 'success' })
         } else {
           uni.showToast({ title: res.message || '设置失败', icon: 'none' })
