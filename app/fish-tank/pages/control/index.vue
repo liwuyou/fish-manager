@@ -13,7 +13,7 @@
       
       <view class="control-card">
         <view class="control-header">
-          <text class="control-name">水泵1</text>
+          <text class="control-name" @click="startRename('pump1', '水泵1')">{{ getCtrlName('pump1', '水泵1') }}</text>
           <text class="control-value">{{ pumpLevels[status.pwm1Level] }}</text>
         </view>
         <view class="pump-controls">
@@ -31,7 +31,7 @@
       
       <view class="control-card">
         <view class="control-header">
-          <text class="control-name">水泵2</text>
+          <text class="control-name" @click="startRename('pump2', '水泵2')">{{ getCtrlName('pump2', '水泵2') }}</text>
           <text class="control-value">{{ pumpLevels[status.pwm2Level] }}</text>
         </view>
         <view class="pump-controls">
@@ -53,7 +53,7 @@
       
       <view class="control-card">
         <view class="control-header">
-          <text class="control-name">灯条</text>
+          <text class="control-name" @click="startRename('light', '灯条')">{{ getCtrlName('light', '灯条') }}</text>
           <text class="control-value">{{ pumpLevels[status.pwm3Level] }}</text>
         </view>
         <view class="pump-controls">
@@ -71,11 +71,65 @@
     </view>
     
     <view class="control-section">
+      <view class="section-title">气泵 &amp; 风扇</view>
+      
+      <view class="control-card">
+        <view class="control-header">
+          <text class="control-name" @click="startRename('airPump', '气泵')">{{ getCtrlName('airPump', '气泵') }}</text>
+          <text class="control-value">{{ pumpLevels[status.airPumpLevel || 0] }}</text>
+        </view>
+        <view class="pump-controls">
+          <button 
+            v-for="(level, index) in pumpLevels" 
+            :key="'air'+index"
+            class="level-btn"
+            :class="{ active: (status.airPumpLevel || 0) === index }"
+            @click="setAirPump(index)"
+          >
+            {{ level }}
+          </button>
+        </view>
+      </view>
+      
+      <view class="control-card">
+        <view class="control-header">
+          <text class="control-name" @click="startRename('fan', '风扇')">{{ getCtrlName('fan', '风扇') }}</text>
+          <text class="control-value">{{ pumpLevels[status.fanLevel || 0] }}</text>
+        </view>
+        <view class="pump-controls">
+          <button 
+            v-for="(level, index) in pumpLevels" 
+            :key="'fan'+index"
+            class="level-btn"
+            :class="{ active: (status.fanLevel || 0) === index }"
+            @click="setFan(index)"
+          >
+            {{ level }}
+          </button>
+        </view>
+      </view>
+    </view>
+    
+    <view class="control-section">
+      <view class="section-title">开关控制</view>
+      
+      <view class="switch-card">
+        <text class="switch-label" @click="startRename('uv', 'UV灯')">{{ getCtrlName('uv', 'UV灯') }}</text>
+        <switch :checked="status.uvLightOn || false" @change="setUV" color="#1a73e8" />
+      </view>
+      
+      <view class="switch-card">
+        <text class="switch-label" @click="startRename('relay2', '继电器2')">{{ getCtrlName('relay2', '继电器2') }}</text>
+        <switch :checked="status.relay2State || false" @change="setRelay2" color="#1a73e8" />
+      </view>
+    </view>
+    
+    <view class="control-section">
       <view class="section-title">设备控制</view>
       
       <view class="control-card">
         <view class="control-header">
-          <text class="control-name">舵机</text>
+          <text class="control-name" @click="startRename('servo', '舵机')">{{ getCtrlName('servo', '舵机') }}</text>
           <text class="control-value">{{ status.servoMoving ? '运行中' : '空闲' }}</text>
         </view>
         <button 
@@ -90,7 +144,7 @@
       
       <view class="control-card">
         <view class="control-header">
-          <text class="control-name">系统电源</text>
+          <text class="control-name" @click="startRename('power', '系统电源')">{{ getCtrlName('power', '系统电源') }}</text>
           <text class="control-value">{{ status.systemPowered ? '开机' : '关机' }}</text>
         </view>
         <button 
@@ -124,6 +178,24 @@
       <text class="refresh-time">更新于 {{ lastUpdateTime }}</text>
       <button class="refresh-btn" @click="refreshStatus">↻ 刷新</button>
     </view>
+
+    <!-- 重命名弹窗 -->
+    <view v-if="renameVisible" class="dialog-overlay" @click="cancelRename">
+      <view class="dialog-box" @click.stop>
+        <text class="dialog-title">重命名</text>
+        <input 
+          class="dialog-input" 
+          v-model="renameValue" 
+          placeholder="输入名称"
+          maxlength="20"
+          focus
+        />
+        <view class="dialog-buttons">
+          <button class="dialog-btn dialog-cancel" @click="cancelRename">取消</button>
+          <button class="dialog-btn dialog-confirm" @click="confirmRename">确认</button>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -139,6 +211,11 @@ export default {
         pwm1Level: 0,
         pwm2Level: 0,
         pwm3Level: 0,
+        airPumpLevel: 0,
+        fanLevel: 0,
+        uvLightOn: false,
+        relay1State: false,
+        relay2State: false,
         servoMoving: false,
         adcWQVoltage: 0,
         adcTempVoltage: 0,
@@ -146,7 +223,11 @@ export default {
       },
       pumpLevels: ['关', '一档', '二档', '三档'],
       lastUpdateTime: '',
-      timer: null
+      timer: null,
+      renameVisible: false,
+      renameValue: '',
+      renameTarget: '',
+      renameDefault: ''
     }
   },
   onLoad(options) {
@@ -167,6 +248,41 @@ export default {
     }
   },
   methods: {
+    getCtrlName(target, defaultName) {
+      const key = 'ctrl_name_' + this.deviceKey + '_' + target
+      const name = uni.getStorageSync(key)
+      return name || defaultName
+    },
+    
+    startRename(target, defaultName) {
+      this.renameTarget = target
+      this.renameDefault = defaultName
+      this.renameValue = this.getCtrlName(target, defaultName)
+      if (this.renameValue === defaultName) {
+        this.renameValue = ''
+      }
+      this.renameVisible = true
+    },
+    
+    cancelRename() {
+      this.renameVisible = false
+      this.renameTarget = ''
+      this.renameValue = ''
+    },
+    
+    confirmRename() {
+      if (!this.renameTarget) return
+      const key = 'ctrl_name_' + this.deviceKey + '_' + this.renameTarget
+      if (this.renameValue && this.renameValue.trim()) {
+        uni.setStorageSync(key, this.renameValue.trim())
+        uni.showToast({ title: '重命名成功', icon: 'success' })
+      } else {
+        uni.removeStorageSync(key)
+        uni.showToast({ title: '已恢复默认名称', icon: 'none' })
+      }
+      this.cancelRename()
+    },
+    
     async loadStatus() {
       try {
         const res = await getDeviceStatus(this.deviceKey)
@@ -177,6 +293,11 @@ export default {
             pwm1Level: s.pwm1Level || 0,
             pwm2Level: s.pwm2Level || 0,
             pwm3Level: s.pwm3Level || 0,
+            airPumpLevel: s.airPumpLevel || 0,
+            fanLevel: s.fanLevel || 0,
+            uvLightOn: s.uvLightOn || false,
+            relay1State: s.relay1State || false,
+            relay2State: s.relay2State || false,
             servoMoving: s.servoMoving || false,
             adcWQVoltage: s.adcWQVoltage || 0,
             adcTempVoltage: s.adcTempVoltage || 0,
@@ -202,7 +323,6 @@ export default {
         return
       }
       
-      // 乐观更新
       this.status[`pwm${pump}Level`] = level
       
       try {
@@ -224,7 +344,6 @@ export default {
         return
       }
       
-      // 乐观更新
       this.status.pwm3Level = level
       
       try {
@@ -238,6 +357,48 @@ export default {
       } catch (error) {
         uni.showToast({ title: '设置失败', icon: 'none' })
       }
+    },
+    
+    async setAirPump(level) {
+      if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
+      this.status.airPumpLevel = level
+      try {
+        const res = await sendControlCommand(this.deviceKey, 'set_air_pump', { level })
+        if (res.success) { setTimeout(() => this.loadStatus(), 800); uni.showToast({ title: '设置成功', icon: 'success' }) }
+        else { uni.showToast({ title: res.message || '设置失败', icon: 'none' }) }
+      } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
+    },
+    
+    async setFan(level) {
+      if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
+      this.status.fanLevel = level
+      try {
+        const res = await sendControlCommand(this.deviceKey, 'set_fan', { level })
+        if (res.success) { setTimeout(() => this.loadStatus(), 800); uni.showToast({ title: '设置成功', icon: 'success' }) }
+        else { uni.showToast({ title: res.message || '设置失败', icon: 'none' }) }
+      } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
+    },
+    
+    async setUV(e) {
+      if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
+      const on = typeof e === 'object' ? e.detail.value : e
+      this.status.uvLightOn = on
+      try {
+        const res = await sendControlCommand(this.deviceKey, 'set_uv', { on })
+        if (res.success) { setTimeout(() => this.loadStatus(), 800) }
+        else { uni.showToast({ title: res.message || '设置失败', icon: 'none' }) }
+      } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
+    },
+    
+    async setRelay2(e) {
+      if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
+      const on = typeof e === 'object' ? e.detail.value : e
+      this.status.relay2State = on
+      try {
+        const res = await sendControlCommand(this.deviceKey, 'set_relay2', { on })
+        if (res.success) { setTimeout(() => this.loadStatus(), 800) }
+        else { uni.showToast({ title: res.message || '设置失败', icon: 'none' }) }
+      } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
     },
     
     async triggerServo() {
@@ -370,6 +531,12 @@ export default {
   font-size: 30rpx;
   font-weight: bold;
   color: #333;
+  padding: 6rpx 12rpx;
+  border-radius: 8rpx;
+  
+  &:active {
+    background: #f0f0f0;
+  }
 }
 
 .control-value {
@@ -414,6 +581,29 @@ export default {
   
   &.on {
     background: #f44336;
+  }
+}
+
+.switch-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx 30rpx;
+  margin-bottom: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.switch-label {
+  font-size: 30rpx;
+  color: #333;
+  font-weight: 500;
+  padding: 6rpx 12rpx;
+  border-radius: 8rpx;
+  
+  &:active {
+    background: #f0f0f0;
   }
 }
 
@@ -473,5 +663,67 @@ export default {
   color: #1a73e8;
   border: none;
   background: none;
+}
+
+/* 重命名弹窗 */
+.dialog-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.dialog-box {
+  width: 600rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 50rpx 40rpx 30rpx;
+}
+
+.dialog-title {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #333;
+  text-align: center;
+  display: block;
+  margin-bottom: 40rpx;
+}
+
+.dialog-input {
+  width: 100%;
+  height: 80rpx;
+  background: #f5f5f5;
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 30rpx;
+  box-sizing: border-box;
+  margin-bottom: 40rpx;
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: space-between;
+}
+
+.dialog-btn {
+  flex: 1;
+  height: 80rpx;
+  font-size: 30rpx;
+  border-radius: 12rpx;
+  border: none;
+  margin: 0 10rpx;
+}
+
+.dialog-cancel {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.dialog-confirm {
+  background: #1a73e8;
+  color: #fff;
 }
 </style>

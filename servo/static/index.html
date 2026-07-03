@@ -105,6 +105,36 @@ label { font-size: 13px; color: #666; display: block; margin-bottom: 4px; }
         </div>
         
         <div class="card">
+            <h3>🌬️ 气泵</h3>
+            <div class="level-btns" id="airPumpBtns">
+                <button class="btn active" onclick="setAirPump(0)">关</button>
+                <button class="btn" onclick="setAirPump(1)">一档</button>
+                <button class="btn" onclick="setAirPump(2)">二档</button>
+                <button class="btn" onclick="setAirPump(3)">三档</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>🌀 风扇</h3>
+            <div class="level-btns" id="fanBtns">
+                <button class="btn active" onclick="setFan(0)">关</button>
+                <button class="btn" onclick="setFan(1)">一档</button>
+                <button class="btn" onclick="setFan(2)">二档</button>
+                <button class="btn" onclick="setFan(3)">三档</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>☀️ UV灯</h3>
+            <button class="btn btn-block" id="uvBtn" onclick="toggleUV()">开启</button>
+        </div>
+        
+        <div class="card">
+            <h3>🔌 继电器2</h3>
+            <button class="btn btn-block" id="relay2Btn" onclick="toggleRelay2()">开启</button>
+        </div>
+        
+        <div class="card">
             <h3>💧 水泵1</h3>
             <div class="level-btns" id="pump1Btns">
                 <button class="btn active" onclick="setPump(1,0)">关</button>
@@ -330,6 +360,16 @@ async function fetchStatus() {
         updateLevelBtns('pump1Btns', s.pwm1Level || 0);
         updateLevelBtns('pump2Btns', s.pwm2Level || 0);
         updateLevelBtns('lightBtns', s.pwm3Level || 0);
+        updateLevelBtns('airPumpBtns', s.airPumpLevel || 0);
+        updateLevelBtns('fanBtns', s.fanLevel || 0);
+        
+        const uvBtn = document.getElementById('uvBtn');
+        uvBtn.textContent = s.uvLightOn ? '关闭' : '开启';
+        uvBtn.className = 'btn btn-block ' + (s.uvLightOn ? 'btn-success' : '');
+        
+        const relay2Btn = document.getElementById('relay2Btn');
+        relay2Btn.textContent = s.relay2State ? '关闭' : '开启';
+        relay2Btn.className = 'btn btn-block ' + (s.relay2State ? 'btn-success' : '');
         
         document.getElementById('tempValue').textContent = s.adcTempVoltage ? s.adcTempVoltage.toFixed(2) + 'V' : '--';
         document.getElementById('wqValue').textContent = s.adcWQVoltage ? s.adcWQVoltage.toFixed(2) + 'V' : '--';
@@ -385,6 +425,32 @@ function setLight(level) {
     // 乐观更新：立即切换按钮高亮
     updateLevelBtns('lightBtns', level);
     sendCmd('set_light', {level: level});
+}
+
+function setAirPump(level) {
+    updateLevelBtns('airPumpBtns', level);
+    sendCmd('set_air_pump', {level: level});
+}
+
+function setFan(level) {
+    updateLevelBtns('fanBtns', level);
+    sendCmd('set_fan', {level: level});
+}
+
+function toggleUV() {
+    const btn = document.getElementById('uvBtn');
+    const newState = btn.textContent === '开启';
+    btn.textContent = newState ? '关闭' : '开启';
+    btn.className = 'btn btn-block ' + (newState ? 'btn-success' : '');
+    sendCmd('set_uv', {on: newState});
+}
+
+function toggleRelay2() {
+    const btn = document.getElementById('relay2Btn');
+    const newState = btn.textContent === '开启';
+    btn.textContent = newState ? '关闭' : '开启';
+    btn.className = 'btn btn-block ' + (newState ? 'btn-success' : '');
+    sendCmd('set_relay2', {on: newState});
 }
 
 function triggerServo() {

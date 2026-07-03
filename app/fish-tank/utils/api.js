@@ -1,4 +1,5 @@
-const BASE_URL = 'http://218.244.156.155:7965'
+// 服务器地址 - 部署到公网时改为公网IP
+const BASE_URL = 'http://192.168.2.11:7965'
 
 export function request(options) {
   return new Promise((resolve, reject) => {

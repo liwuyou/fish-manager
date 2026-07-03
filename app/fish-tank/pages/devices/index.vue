@@ -41,10 +41,14 @@
             <text>{{ device.online ? '✅' : '🔴' }}</text>
           </view>
           <view class="device-info">
-            <text class="device-name">{{ device.device_key }}</text>
+            <text class="device-name">{{ getDeviceName(device) }}</text>
+            <text class="device-key-label">{{ device.device_key }}</text>
             <text class="device-status">{{ device.online ? '在线' : '离线' }}</text>
           </view>
-          <view class="device-arrow">
+          <view v-if="editMode" class="device-rename" @click.stop="startRename(device)">
+            <text>✏️</text>
+          </view>
+          <view v-else class="device-arrow">
             <text>›</text>
           </view>
         </view>
@@ -62,6 +66,24 @@
       <text class="refresh-time">更新于 {{ lastUpdateTime }}</text>
       <button class="refresh-btn" @click="refreshDevices">↻ 刷新</button>
     </view>
+
+    <!-- 重命名弹窗 -->
+    <view v-if="renameVisible" class="dialog-overlay" @click="cancelRename">
+      <view class="dialog-box" @click.stop>
+        <text class="dialog-title">重命名设备</text>
+        <input 
+          class="dialog-input" 
+          v-model="renameValue" 
+          placeholder="输入设备名称"
+          maxlength="20"
+          focus
+        />
+        <view class="dialog-buttons">
+          <button class="dialog-btn dialog-cancel" @click="cancelRename">取消</button>
+          <button class="dialog-btn dialog-confirm" @click="confirmRename">确认</button>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -78,13 +100,19 @@ export default {
       timer: null,
       phoneNumber: '',
       editMode: false,
-      selectedDevices: []
+      selectedDevices: [],
+      renameVisible: false,
+      renameValue: '',
+      renameDevice: null
     }
   },
   computed: {
     filteredDevices() {
       if (!this.searchKey) return this.devices
-      return this.devices.filter(d => d.device_key.includes(this.searchKey))
+      return this.devices.filter(d => {
+        const name = this.getDeviceName(d)
+        return d.device_key.includes(this.searchKey) || name.includes(this.searchKey)
+      })
     }
   },
   onLoad() {
@@ -100,6 +128,38 @@ export default {
     }
   },
   methods: {
+    getDeviceName(device) {
+      const key = 'device_name_' + device.device_key
+      const name = uni.getStorageSync(key)
+      return name || device.device_key
+    },
+    
+    startRename(device) {
+      this.renameDevice = device
+      this.renameValue = this.getDeviceName(device) === device.device_key ? '' : this.getDeviceName(device)
+      this.renameVisible = true
+    },
+    
+    cancelRename() {
+      this.renameVisible = false
+      this.renameDevice = null
+      this.renameValue = ''
+    },
+    
+    confirmRename() {
+      if (!this.renameDevice) return
+      const key = 'device_name_' + this.renameDevice.device_key
+      if (this.renameValue && this.renameValue.trim()) {
+        uni.setStorageSync(key, this.renameValue.trim())
+        uni.showToast({ title: '重命名成功', icon: 'success' })
+      } else {
+        uni.removeStorageSync(key)
+        uni.showToast({ title: '已恢复默认名称', icon: 'none' })
+      }
+      this.$forceUpdate()
+      this.cancelRename()
+    },
+    
     async loadDevices() {
       const phone = getPhoneNumber()
       if (!phone) return
@@ -180,6 +240,7 @@ export default {
             try {
               const result = await unbindDevice(phone, key)
               if (result.success) successCount++
+              uni.removeStorageSync('device_name_' + key)
             } catch (e) {}
           }
           
@@ -361,7 +422,12 @@ export default {
   font-weight: bold;
   color: #333;
   display: block;
-  margin-bottom: 8rpx;
+}
+
+.device-key-label {
+  font-size: 22rpx;
+  color: #bbb;
+  display: block;
 }
 
 .device-status {
@@ -372,6 +438,13 @@ export default {
 .device-arrow {
   font-size: 40rpx;
   color: #ccc;
+  padding: 10rpx;
+}
+
+.device-rename {
+  font-size: 36rpx;
+  padding: 10rpx;
+  margin-left: 10rpx;
 }
 
 .bottom-bar {
@@ -428,5 +501,67 @@ export default {
   color: #1a73e8;
   border: none;
   background: none;
+}
+
+/* 重命名弹窗 */
+.dialog-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.dialog-box {
+  width: 600rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 50rpx 40rpx 30rpx;
+}
+
+.dialog-title {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #333;
+  text-align: center;
+  display: block;
+  margin-bottom: 40rpx;
+}
+
+.dialog-input {
+  width: 100%;
+  height: 80rpx;
+  background: #f5f5f5;
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 30rpx;
+  box-sizing: border-box;
+  margin-bottom: 40rpx;
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: space-between;
+}
+
+.dialog-btn {
+  flex: 1;
+  height: 80rpx;
+  font-size: 30rpx;
+  border-radius: 12rpx;
+  border: none;
+  margin: 0 10rpx;
+}
+
+.dialog-cancel {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.dialog-confirm {
+  background: #1a73e8;
+  color: #fff;
 }
 </style>

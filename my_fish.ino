@@ -17,13 +17,16 @@
 
 // ==================== 引脚定义 ====================
 #define RELAY_PIN     25   // 继电器1 - 控制12V+5V电源
+#define RELAY2_PIN    27   // 继电器2 - GPIO27 (新增)
 #define PWM1_PIN      18   // 水泵1 - GPIO18, LEDC通道4
 #define PWM2_PIN      19   // 水泵2 - GPIO19, LEDC通道5
 #define PWM3_PIN      23   // 灯条 - GPIO23, LEDC通道6
+#define PWM_AIR_PUMP_PIN  17   // 气泵 - GPIO17, LEDC通道2 (新增)
+#define PWM_FAN_PIN       26   // 风扇 - GPIO26, LEDC通道3 (新增)
+#define UV_PIN        16   // UV灯 - GPIO16, 数字量 (新增)
 #define SERVO_PIN     13   // 舵机 - GPIO13 (SG90)
 #define BUTTON1_PIN   15   // 按钮1 - GPIO15 (开关机)
 #define BUTTON2_PIN   14   // 按钮2 - GPIO14 (水泵1)
-#define BUTTON3_PIN   4    // 按钮3 - GPIO4 (水泵2)
 #define BUTTON4_PIN   5    // 按钮4 - GPIO5 (灯条)
 #define BUTTON5_PIN   12   // 按钮5 - GPIO12 (舵机)
 #define OLED_SDA_PIN  21   // OLED SDA - GPIO21
@@ -40,6 +43,8 @@
 #define LEDC_CH_PUMP2  5
 #define LEDC_CH_LIGHT  6
 #define LEDC_CH_BUZZER 7
+#define LEDC_CH_AIR_PUMP  2   // 气泵 - LEDC通道2 (避开舵机)
+#define LEDC_CH_FAN       3   // 风扇 - LEDC通道3 (避开舵机)
 
 // ==================== EEPROM地址 ====================
 #define EEPROM_PHONE_ADDR    0
@@ -48,17 +53,16 @@
 #define EEPROM_SIZE       256
 
 // ==================== 按键时间配置 ====================
-#define POWER_ON_DELAY      2000   // 开关机长按时间
-#define PUMP_START_DELAY    1500   // 水泵启动长按时间
+#define POWER_ON_DELAY      1500   // 开关机长按时间
+#define PUMP_START_DELAY    1000   // 水泵启动长按时间
 #define DEBOUNCE_DELAY        50   // 按键消抖
 
 // ==================== 舵机配置 ====================
 #define SERVO_LEFT_LIMIT   0
 #define SERVO_RIGHT_LIMIT  180
-#define SERVO_MID_POS      90
-#define SERVO_MOVE_SPEED   60      // 度/秒
-#define SERVO_STEP_DELAY   20      // 步进间隔(ms)
-#define SERVO_RIGHT_STOP_TIME 2000 // 右限位停顿时间(ms)
+#define SERVO_MOVE_SPEED   120      // 度/秒
+#define SERVO_STEP_DELAY   40      // 步进间隔(ms)
+#define SERVO_RIGHT_STOP_TIME 1500 // 右限位停顿时间(ms)
 #define SERVO_MIN_ANGLE    0
 #define SERVO_MAX_ANGLE    180
 
@@ -93,10 +97,14 @@
 // ==================== 全局变量 ====================
 bool systemPowered = true;
 bool relay1State = false;
+bool relay2State = false;
 
 int pwm1Level = 0;
 int pwm2Level = 0;
 int pwm3Level = 0;
+int airPumpLevel = 0;
+int fanLevel = 0;
+bool uvLightOn = false;
 int pwmValues[] = {0, 85, 170, 255};
 
 Servo servo;
@@ -107,16 +115,13 @@ unsigned long servoMoveStartTime = 0;
 
 int lastButton1 = HIGH;
 int lastButton2 = HIGH;
-int lastButton3 = HIGH;
 int lastButton4 = HIGH;
 int lastButton5 = HIGH;
 unsigned long button1PressTime = 0;
 unsigned long button2PressTime = 0;
-unsigned long button3PressTime = 0;
 unsigned long button4PressTime = 0;
 bool button1LongPressed = false;
 bool button2LongPressed = false;
-bool button3LongPressed = false;
 bool button4LongPressed = false;
 bool pump2On = false;
 bool lightOn = false;
@@ -149,6 +154,7 @@ bool wsInitialized = false;
 unsigned long lastHeartbeat = 0;
 unsigned long lastStatusReport = 0;
 unsigned long lastWsAttempt = 0;
+unsigned long lastWsLoopTime = 0;
 bool wsReconnecting = false;
 
 // ==================== 函数声明 ====================
@@ -451,6 +457,7 @@ void initWebSocket() {
   webSocket.begin(WS_SERVER_HOST, WS_SERVER_PORT, WS_SERVER_PATH);
   webSocket.onEvent(wsEvent);
   webSocket.setReconnectInterval(WS_RECONNECT_DELAY);
+  lastWsLoopTime = 0;
   DPRINTLN("[WS] 初始化完成");
 }
 
@@ -523,13 +530,18 @@ void wsSendHeartbeat() {
 }
 
 void wsSendStatus() {
-  DynamicJsonDocument doc(256);
+  DynamicJsonDocument doc(384);
   doc["type"] = "status";
   
   JsonObject status = doc.createNestedObject("status");
   status["pwm1Level"] = pwm1Level;
   status["pwm2Level"] = pwm2Level;
   status["pwm3Level"] = pwm3Level;
+  status["airPumpLevel"] = airPumpLevel;
+  status["fanLevel"] = fanLevel;
+  status["uvLightOn"] = uvLightOn;
+  status["relay1State"] = relay1State;
+  status["relay2State"] = relay2State;
   status["servoMoving"] = servoMoving;
   status["adcWQVoltage"] = adcWQVoltage;
   status["adcTempVoltage"] = adcTempVoltage;
@@ -552,6 +564,11 @@ void wsSendCmdResult(String cmdId, String cmd, bool success, String message) {
   result["pwm1Level"] = pwm1Level;
   result["pwm2Level"] = pwm2Level;
   result["pwm3Level"] = pwm3Level;
+  result["airPumpLevel"] = airPumpLevel;
+  result["fanLevel"] = fanLevel;
+  result["uvLightOn"] = uvLightOn;
+  result["relay1State"] = relay1State;
+  result["relay2State"] = relay2State;
   result["servoMoving"] = servoMoving;
   result["systemPowered"] = systemPowered;
   
@@ -590,6 +607,36 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
     pwm3Level = level;
     ledcWrite(PWM3_PIN, pwmValues[pwm3Level]);
     wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus();
+    
+  } else if (cmd == "set_air_pump") {
+    int level = params["level"] | 0;
+    level = constrain(level, 0, 3);
+    airPumpLevel = level;
+    ledcWrite(PWM_AIR_PUMP_PIN, pwmValues[airPumpLevel]);
+    wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus();
+    
+  } else if (cmd == "set_fan") {
+    int level = params["level"] | 0;
+    level = constrain(level, 0, 3);
+    fanLevel = level;
+    ledcWrite(PWM_FAN_PIN, pwmValues[fanLevel]);
+    wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus();
+    
+  } else if (cmd == "set_uv") {
+    bool on = params["on"] | false;
+    uvLightOn = on;
+    digitalWrite(UV_PIN, on ? HIGH : LOW);
+    wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus();
+    
+  } else if (cmd == "set_relay2") {
+    bool on = params["on"] | false;
+    relay2State = on;
+    digitalWrite(RELAY2_PIN, on ? HIGH : LOW);
+    wsSendCmdResult(cmdId, cmd, true);
     wsSendStatus(); // 立即发送完整状态
     
   } else if (cmd == "trigger_servo") {
@@ -621,7 +668,6 @@ void handleButtons() {
   unsigned long now = millis();
   int button1 = digitalRead(BUTTON1_PIN);
   int button2 = digitalRead(BUTTON2_PIN);
-  int button3 = digitalRead(BUTTON3_PIN);
   int button4 = digitalRead(BUTTON4_PIN);
   int button5 = digitalRead(BUTTON5_PIN);
   
@@ -668,31 +714,6 @@ void handleButtons() {
     }
   }
   lastButton2 = button2;
-  
-  // 按键3: 水泵2
-  if (button3 == LOW && lastButton3 == HIGH) {
-    button3PressTime = now;
-    button3LongPressed = false;
-  } else if (button3 == LOW && !button3LongPressed) {
-    if (now - button3PressTime >= PUMP_START_DELAY) {
-      button3LongPressed = true;
-      if (pwm2Level == 0) {
-        pwm2Level = 1;
-        playBuzzerTone(BUZZER_TONE_SUCCESS, BUZZER_DURATION_SHORT);
-      } else {
-        pwm2Level = 0;
-        playBuzzerTone(BUZZER_TONE_ERROR, BUZZER_DURATION_SHORT);
-      }
-      ledcWrite(PWM2_PIN, pwmValues[pwm2Level]);
-    }
-  } else if (button3 == HIGH && lastButton3 == LOW && !button3LongPressed) {
-    if (pwm2Level > 0) {
-      pwm2Level = (pwm2Level % 3) + 1;
-      ledcWrite(PWM2_PIN, pwmValues[pwm2Level]);
-      playBuzzerTone(BUZZER_TONE_SHORT, BUZZER_DURATION_SHORT);
-    }
-  }
-  lastButton3 = button3;
   
   // 按键4: 灯条
   if (button4 == LOW && lastButton4 == HIGH) {
@@ -822,7 +843,9 @@ void updateOLED() {
   snprintf(line1, sizeof(line1), "M1:%d M2:%d LED:%d", pwm1Level, pwm2Level, pwm3Level);
   u8g2.drawStr(0, 10, line1);
   
-  u8g2.drawStr(0, 22, servoMoving ? "Servo:busy" : "Servo:free");
+  char line2[32];
+  snprintf(line2, sizeof(line2), "UV:%s Air:%d Fan:%d", uvLightOn ? "ON" : "OFF", airPumpLevel, fanLevel);
+  u8g2.drawStr(0, 22, line2);
   
   char line3[32];
   snprintf(line3, sizeof(line3), "T:%.1fV W:%.1fV", adcTempVoltage, adcWQVoltage);
@@ -867,6 +890,14 @@ void powerOnSystem() {
   ledcWrite(PWM1_PIN, 0);
   ledcWrite(PWM2_PIN, 0);
   ledcWrite(PWM3_PIN, 0);
+  ledcWrite(PWM_AIR_PUMP_PIN, 0);
+  ledcWrite(PWM_FAN_PIN, 0);
+  digitalWrite(UV_PIN, LOW);
+  digitalWrite(RELAY2_PIN, LOW);
+  airPumpLevel = 0;
+  fanLevel = 0;
+  uvLightOn = false;
+  relay2State = false;
   
   startWiFiAP();
   
@@ -884,11 +915,19 @@ void powerOffSystem() {
   pwm1Level = 0;
   pwm2Level = 0;
   pwm3Level = 0;
+  airPumpLevel = 0;
+  fanLevel = 0;
+  uvLightOn = false;
+  relay2State = false;
   servoMoving = false;
   
   ledcWrite(PWM1_PIN, 0);
   ledcWrite(PWM2_PIN, 0);
   ledcWrite(PWM3_PIN, 0);
+  ledcWrite(PWM_AIR_PUMP_PIN, 0);
+  ledcWrite(PWM_FAN_PIN, 0);
+  digitalWrite(UV_PIN, LOW);
+  digitalWrite(RELAY2_PIN, LOW);
   servo.detach();
   
   digitalWrite(RELAY_PIN, LOW);
@@ -918,13 +957,21 @@ void setup() {
   ledcAttachChannel(PWM1_PIN, LEDC_FREQ, LEDC_RES, LEDC_CH_PUMP1);
   ledcAttachChannel(PWM2_PIN, LEDC_FREQ, LEDC_RES, LEDC_CH_PUMP2);
   ledcAttachChannel(PWM3_PIN, LEDC_FREQ, LEDC_RES, LEDC_CH_LIGHT);
+  ledcAttachChannel(PWM_AIR_PUMP_PIN, LEDC_FREQ, LEDC_RES, LEDC_CH_AIR_PUMP);
+  ledcAttachChannel(PWM_FAN_PIN, LEDC_FREQ, LEDC_RES, LEDC_CH_FAN);
   ledcWrite(PWM1_PIN, 0);
   ledcWrite(PWM2_PIN, 0);
   ledcWrite(PWM3_PIN, 0);
+  ledcWrite(PWM_AIR_PUMP_PIN, 0);
+  ledcWrite(PWM_FAN_PIN, 0);
+  
+  pinMode(UV_PIN, OUTPUT);
+  digitalWrite(UV_PIN, LOW);
+  pinMode(RELAY2_PIN, OUTPUT);
+  digitalWrite(RELAY2_PIN, LOW);
   
   pinMode(BUTTON1_PIN, INPUT_PULLUP);
   pinMode(BUTTON2_PIN, INPUT_PULLUP);
-  pinMode(BUTTON3_PIN, INPUT_PULLUP);
   pinMode(BUTTON4_PIN, INPUT_PULLUP);
   pinMode(BUTTON5_PIN, INPUT_PULLUP);
   
@@ -937,7 +984,7 @@ void setup() {
   phoneNumber = "";
   for (int i = 0; i < 20; i++) {
     char c = EEPROM.read(EEPROM_PHONE_ADDR + i);
-    if (c == 0) break;
+    if (c == 0 || c == 0xFF) break;
     phoneNumber += c;
   }
   
