@@ -485,5 +485,101 @@
       "servoMoving": true,
       "systemPowered": true
     }
+  },
+  {
+    "time": 1783077453,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783078805,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783079405,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783079525,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783080005,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783080305,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 1,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
   }
 ]

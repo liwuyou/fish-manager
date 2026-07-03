@@ -36,6 +36,10 @@
 #define ADC_PIN_WATER_TEMP     35   // 水温检测 - ADC1_CH7
 #define ADC_PIN_WATER_TEMP_REF 32   // 温度参考 - ADC1_CH4
 
+// TDS 测量
+#define TDS_SCOUNT   10              // 采样次数（10×1秒=10秒更新一次）
+#define VREF         3.3             // ESP32 ADC参考电压
+
 // ==================== LEDC配置 ====================
 #define LEDC_FREQ     1000    // PWM频率 1kHz
 #define LEDC_RES      8       // 8位分辨率
@@ -81,7 +85,12 @@
 #define STATUS_DEBOUNCE_DELAY 10000   // 状态防抖上报延迟 10秒
 
 // ==================== ADC配置 ====================
-#define ADC_TEMP_CORRECT_ENABLE false  // 是否开启温度电压校准
+#define ADC_TEMP_CORRECT_ENABLE false   // 是否开启温度电压校准
+// NTC热敏电阻参数（10kΩ @25°C, B=3950, 上拉4kΩ, 供电5V经分压测量）
+#define NTC_R0          10000   // 25°C时电阻(Ω)
+#define NTC_B           3950    // B值
+#define R_FIXED         4000    // 上拉电阻(Ω)
+#define T0_KELVIN       298.15  // 25°C对应开尔文温度
 
 // ==================== 串口调试 ====================
 #define SERIAL_DEBUG_ENABLE true
@@ -132,6 +141,11 @@ bool oledInitialized = false;
 float adcWQVoltage = 0;
 float adcTempVoltage = 0;
 float adcTempRefVoltage = 0;
+float waterTemperature = 0;         // 水温(°C)
+float tdsValue = 0;                 // TDS值(ppm)
+int tdsBuffer[TDS_SCOUNT];          // TDS采样缓冲区
+int tdsBufferIndex = 0;             // 当前缓冲区索引
+bool tdsBufferReady = false;        // 缓冲区是否已填满
 
 String deviceMAC = "";
 String deviceKey = "";
@@ -443,10 +457,10 @@ void handleSaveConfig() {
 void handleStatus() {
   char buf[300];
   snprintf(buf, sizeof(buf), 
-    "{\"pwm1Level\":%d,\"pwm2Level\":%d,\"pwm3Level\":%d,\"servoMoving\":%s,\"adcWQVoltage\":%.2f,\"adcTempVoltage\":%.2f,\"systemPowered\":%s}",
+    "{\"pwm1Level\":%d,\"pwm2Level\":%d,\"pwm3Level\":%d,\"servoMoving\":%s,\"adcWQVoltage\":%.2f,\"adcTempVoltage\":%.2f,\"waterTemperature\":%.1f,\"tdsValue\":%.0f,\"systemPowered\":%s}",
     pwm1Level, pwm2Level, pwm3Level,
     servoMoving ? "true" : "false",
-    adcWQVoltage, adcTempVoltage,
+    adcWQVoltage, adcTempVoltage, waterTemperature, tdsValue,
     systemPowered ? "true" : "false");
   server.send(200, "application/json", buf);
 }
@@ -546,6 +560,8 @@ void wsSendStatus() {
   status["servoMoving"] = servoMoving;
   status["adcWQVoltage"] = adcWQVoltage;
   status["adcTempVoltage"] = adcTempVoltage;
+  status["waterTemperature"] = waterTemperature;
+  status["tdsValue"] = tdsValue;
   status["systemPowered"] = systemPowered;
   
   String msg;
@@ -831,9 +847,31 @@ void updateServo() {
 // ==================== ADC采样 ====================
 void readADC() {
   int rawWQ = analogRead(ADC_PIN_WATER_QUALITY);
-  int rawTemp = analogRead(ADC_PIN_WATER_TEMP);
   
-  adcWQVoltage = rawWQ * 3.3 / 4095.0;
+  // 填充TDS缓冲区
+  tdsBuffer[tdsBufferIndex] = rawWQ;
+  tdsBufferIndex++;
+  if (tdsBufferIndex >= TDS_SCOUNT) {
+    tdsBufferIndex = 0;
+    tdsBufferReady = true;
+  }
+  
+  // 缓冲区满时计算TDS
+  if (tdsBufferReady) {
+    int buf[TDS_SCOUNT];
+    memcpy(buf, tdsBuffer, sizeof(tdsBuffer));
+    int median = getMedianNum(buf, TDS_SCOUNT);
+    float avgVoltage = median * VREF / 4095.0;
+    float compCoeff = 1.0 + 0.02 * (waterTemperature - 25.0);  // 温度补偿
+    float compVoltage = avgVoltage / compCoeff;
+    tdsValue = (133.42 * compVoltage * compVoltage * compVoltage 
+              - 255.86 * compVoltage * compVoltage 
+              + 857.39 * compVoltage) * 0.5;
+    if (tdsValue < 0) tdsValue = 0;
+    adcWQVoltage = avgVoltage;
+  }
+  
+  int rawTemp = analogRead(ADC_PIN_WATER_TEMP);
   adcTempVoltage = rawTemp * 3.3 / 4095.0;
   
   #if ADC_TEMP_CORRECT_ENABLE
@@ -841,7 +879,42 @@ void readADC() {
   adcTempRefVoltage = rawRef * 3.3 / 4095.0;
   float actualVCC = adcTempRefVoltage * 2.0;
   adcTempVoltage = rawTemp * actualVCC / 4095.0;
+  #else
+  float actualVCC = 3.3;
   #endif
+  
+  // 计算NTC温度
+  if (adcTempVoltage > 0 && adcTempVoltage < actualVCC) {
+    float R_ntc = adcTempVoltage * R_FIXED / (actualVCC - adcTempVoltage);
+    float steinhart = log(R_ntc / NTC_R0);
+    steinhart /= NTC_B;
+    steinhart += 1.0 / T0_KELVIN;
+    steinhart = 1.0 / steinhart;
+    waterTemperature = steinhart - 273.15;
+  } else {
+    waterTemperature = 0;
+  }
+}
+
+int getMedianNum(int bArray[], int iFilterLen) {
+  int bTab[iFilterLen];
+  for (int i = 0; i < iFilterLen; i++)
+    bTab[i] = bArray[i];
+  int i, j, bTemp;
+  for (j = 0; j < iFilterLen - 1; j++) {
+    for (i = 0; i < iFilterLen - j - 1; i++) {
+      if (bTab[i] > bTab[i + 1]) {
+        bTemp = bTab[i];
+        bTab[i] = bTab[i + 1];
+        bTab[i + 1] = bTemp;
+      }
+    }
+  }
+  if ((iFilterLen & 1) > 0)
+    bTemp = bTab[(iFilterLen - 1) / 2];
+  else
+    bTemp = (bTab[iFilterLen / 2] + bTab[iFilterLen / 2 - 1]) / 2;
+  return bTemp;
 }
 
 // ==================== OLED显示 ====================
@@ -860,7 +933,7 @@ void updateOLED() {
   u8g2.drawStr(0, 22, line2);
   
   char line3[32];
-  snprintf(line3, sizeof(line3), "T:%.1fV W:%.1fV", adcTempVoltage, adcWQVoltage);
+  snprintf(line3, sizeof(line3), "T:%.1fC TDS:%.0fppm", waterTemperature, tdsValue);
   u8g2.drawStr(0, 34, line3);
   
   const char* wifiText = "WiFi:Off";

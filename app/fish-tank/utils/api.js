@@ -62,3 +62,26 @@ export function sendControlCommand(deviceKey, cmd, params) {
     data: { device_key: deviceKey, cmd, params }
   })
 }
+
+export function getTimers(deviceKey) {
+  return request({
+    url: '/api/timers',
+    data: { device_key: deviceKey }
+  })
+}
+
+export function saveTimers(deviceKey, timers) {
+  return request({
+    url: '/api/timers',
+    method: 'POST',
+    data: { device_key: deviceKey, timers }
+  })
+}
+
+export function deleteTimer(deviceKey, timerId) {
+  return request({
+    url: '/api/timers/delete',
+    method: 'POST',
+    data: { device_key: deviceKey, timer_id: timerId }
+  })
+}

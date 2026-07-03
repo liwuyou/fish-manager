@@ -11,6 +11,7 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 USERS_FILE = os.path.join(DATA_DIR, 'users.json')
 DEVICES_FILE = os.path.join(DATA_DIR, 'devices.json')
 SERVO_LOG_FILE = os.path.join(DATA_DIR, 'servo_log.json')
+TIMERS_FILE = os.path.join(DATA_DIR, 'timers.json')
 
 HEARTBEAT_TIMEOUT = 60
 SAVE_INTERVAL = 3  # 批量写入间隔（秒）
@@ -100,6 +101,11 @@ def unsubscribe_client(ws):
 users = load_json(USERS_FILE, {})
 devices = load_json(DEVICES_FILE, {})
 servo_log = load_json(SERVO_LOG_FILE, [])
+timers = load_json(TIMERS_FILE, {})
+
+# ==================== 定时任务调度器状态 ====================
+_last_executed_minute = {}  # {device_key: {timer_id: minute}}
+_pending_stops = {}         # {stop_time_sec: [{device_key, msg}]}
 
 # 启动后台写入线程
 save_thread = threading.Thread(target=_background_save, daemon=True)
@@ -207,6 +213,37 @@ def control_device():
         return jsonify({'success': True, 'cmd_id': cmd_id})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+# ==================== 定时任务 API ====================
+@app.route('/api/timers', methods=['GET'])
+def get_timers():
+    device_key = request.args.get('device_key', '')
+    if not device_key:
+        return jsonify({'success': False, 'message': 'device_key required'}), 400
+    return jsonify({'success': True, 'timers': timers.get(device_key, [])})
+
+@app.route('/api/timers', methods=['POST'])
+def save_timers():
+    data = request.json
+    device_key = data.get('device_key', '')
+    timer_list = data.get('timers', [])
+    if not device_key:
+        return jsonify({'success': False, 'message': 'device_key required'}), 400
+    timers[device_key] = timer_list
+    save_json(TIMERS_FILE, timers)
+    return jsonify({'success': True})
+
+@app.route('/api/timers/delete', methods=['POST'])
+def delete_timer():
+    data = request.json
+    device_key = data.get('device_key', '')
+    timer_id = data.get('timer_id')
+    if not device_key or timer_id is None:
+        return jsonify({'success': False, 'message': '参数错误'}), 400
+    device_timers = timers.get(device_key, [])
+    timers[device_key] = [t for t in device_timers if t.get('id') != timer_id]
+    save_json(TIMERS_FILE, timers)
+    return jsonify({'success': True})
 
 # ==================== WebSocket: 设备 ====================
 device_ws = {}
@@ -387,6 +424,101 @@ def check_offline_devices():
         except:
             pass
 
+# ==================== 定时任务调度器 ====================
+def timer_scheduler():
+    while True:
+        time.sleep(30)
+        now = time.localtime()
+        current_hour = now.tm_hour
+        current_minute = now.tm_min
+        current_time_sec = int(time.time())
+
+        try:
+            # 处理到期的停止任务
+            stop_keys = sorted(_pending_stops.keys())
+            for stop_at in stop_keys:
+                if stop_at > current_time_sec:
+                    break
+                for stop_item in _pending_stops.pop(stop_at, []):
+                    device_key = stop_item['device_key']
+                    ws = device_ws.get(device_key)
+                    if ws:
+                        try:
+                            ws.send(json.dumps(stop_item['msg']))
+                            print(f"[TIMER] 停止 {device_key}: {stop_item['msg']['cmd']}")
+                        except:
+                            pass
+
+            # 处理定时任务
+            for device_key, timer_list in list(timers.items()):
+                for timer in timer_list:
+                    if not timer.get('enabled', False):
+                        continue
+                    if timer.get('hour') != current_hour or timer.get('minute') != current_minute:
+                        continue
+
+                    # 检查是否已在本分钟执行过
+                    if device_key not in _last_executed_minute:
+                        _last_executed_minute[device_key] = {}
+                    last_min = _last_executed_minute[device_key].get(timer['id'])
+                    if last_min == current_minute:
+                        continue
+
+                    # 执行任务
+                    ws = device_ws.get(device_key)
+                    if not ws:
+                        continue
+
+                    cmd = timer['cmd']
+                    params = timer.get('params', {})
+                    cmd_id = str(int(time.time() * 1000)) + f"_{timer['id']}"
+                    msg = {
+                        'type': 'cmd',
+                        'cmd_id': cmd_id,
+                        'cmd': cmd,
+                        'params': params
+                    }
+
+                    try:
+                        ws.send(json.dumps(msg))
+                        _last_executed_minute[device_key][timer['id']] = current_minute
+                        print(f"[TIMER] 执行 {device_key}: {cmd} (timer_id={timer['id']})")
+                    except:
+                        continue
+
+                    # 处理 duration>0 的停止任务
+                    duration = timer.get('duration', 0)
+                    if duration > 0:
+                        stop_at = current_time_sec + duration
+                        stop_msg = {'type': 'cmd', 'cmd_id': f'{cmd_id}_stop'}
+
+                        if cmd == 'set_pump':
+                            pump_val = params.get('pump', 1)
+                            stop_msg['cmd'] = 'set_pump'
+                            stop_msg['params'] = {'pump': pump_val, 'level': 0}
+                        elif cmd == 'set_light':
+                            stop_msg['cmd'] = 'set_light'
+                            stop_msg['params'] = {'level': 0}
+                        elif cmd == 'set_air_pump':
+                            stop_msg['cmd'] = 'set_air_pump'
+                            stop_msg['params'] = {'level': 0}
+                        elif cmd == 'set_fan':
+                            stop_msg['cmd'] = 'set_fan'
+                            stop_msg['params'] = {'level': 0}
+                        else:
+                            # trigger_servo 等瞬时命令不需要 stop
+                            continue
+
+                        if stop_at not in _pending_stops:
+                            _pending_stops[stop_at] = []
+                        _pending_stops[stop_at].append({
+                            'device_key': device_key,
+                            'msg': stop_msg
+                        })
+                        print(f"[TIMER] 注册停止 {device_key}: {cmd} 将在 {duration}秒后执行")
+        except:
+            pass
+
 # ==================== 启动 ====================
 if __name__ == '__main__':
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -394,6 +526,9 @@ if __name__ == '__main__':
     
     offline_thread = threading.Thread(target=check_offline_devices, daemon=True)
     offline_thread.start()
+    
+    timer_thread = threading.Thread(target=timer_scheduler, daemon=True)
+    timer_thread.start()
     
     print("=" * 50)
     print("  养鱼生态箱 - 远程控制服务器 v2.0")

@@ -163,13 +163,13 @@
       <view class="sensor-grid">
         <view class="sensor-item">
           <text class="sensor-icon">🌡️</text>
-          <text class="sensor-label">温度电压</text>
-          <text class="sensor-value">{{ status.adcTempVoltage.toFixed(2) }}V</text>
+          <text class="sensor-label">水温</text>
+          <text class="sensor-value">{{ status.waterTemperature.toFixed(1) }}°C</text>
         </view>
         <view class="sensor-item">
           <text class="sensor-icon">💧</text>
-          <text class="sensor-label">水质电压</text>
-          <text class="sensor-value">{{ status.adcWQVoltage.toFixed(2) }}V</text>
+          <text class="sensor-label">TDS</text>
+          <text class="sensor-value">{{ status.tdsValue }}ppm</text>
         </view>
       </view>
     </view>
@@ -177,6 +177,89 @@
     <view class="bottom-bar">
       <text class="refresh-time">更新于 {{ lastUpdateTime }}</text>
       <button class="refresh-btn" @click="refreshStatus">↻ 刷新</button>
+    </view>
+
+    <!-- 定时任务区域 -->
+    <view class="control-section">
+      <view class="section-title">定时任务</view>
+
+      <view v-if="timers.length === 0" class="empty-tip">
+        <text>暂无定时任务，点击下方按钮添加</text>
+      </view>
+
+      <view v-for="(timer, index) in timers" :key="timer.id" class="timer-card">
+        <view class="timer-card-left">
+          <view class="timer-card-top">
+            <text class="timer-name">{{ timer.name }}</text>
+            <text class="timer-time">{{ ('0' + timer.hour).slice(-2) }}:{{ ('0' + timer.minute).slice(-2) }}</text>
+          </view>
+          <text class="timer-desc">{{ getTaskTypeLabel(timer) }}</text>
+          <text v-if="timer.duration > 0 && timer.cmd !== 'trigger_servo'" class="timer-duration">持续 {{ timer.duration / 60 }} 分钟后停止</text>
+        </view>
+        <view class="timer-card-right">
+          <switch :checked="timer.enabled" @change="toggleTimer(timer)" color="#1a73e8" style="transform: scale(0.8);" />
+          <view class="timer-actions">
+            <text class="timer-edit" @click="openTimerDialog(timer)">编辑</text>
+            <text class="timer-delete" @click="handleDeleteTimer(timer)">删除</text>
+          </view>
+        </view>
+      </view>
+
+      <button class="add-timer-btn" @click="openTimerDialog(null)">+ 添加任务</button>
+    </view>
+
+    <!-- 定时任务弹窗 -->
+    <view v-if="timerDialogVisible" class="dialog-overlay" @click="closeTimerDialog">
+      <view class="dialog-box timer-dialog" @click.stop>
+        <text class="dialog-title">{{ editingTimer ? '编辑任务' : '添加任务' }}</text>
+
+        <!-- 任务名称 -->
+        <text class="timer-form-label">任务名称</text>
+        <input
+          class="dialog-input"
+          v-model="timerForm.name"
+          placeholder="输入任务名称"
+          maxlength="20"
+        />
+
+        <!-- 时间选择 -->
+        <text class="timer-form-label">执行时间</text>
+        <view class="timer-picker-row">
+          <picker mode="multiSelector" :range="[hours, minutes]" @change="onTimeChange">
+            <view class="timer-picker">
+              {{ ('0' + timerForm.hour).slice(-2) }} : {{ ('0' + timerForm.minute).slice(-2) }}
+            </view>
+          </picker>
+        </view>
+
+        <!-- 任务类型 -->
+        <text class="timer-form-label">任务类型</text>
+        <view class="timer-picker-row">
+          <picker mode="selector" :range="taskTypeLabels" @change="onTaskTypeChange">
+            <view class="timer-picker">
+              {{ taskTypeLabels[timerForm.type] }}
+            </view>
+          </picker>
+        </view>
+
+        <!-- 持续时间 -->
+        <text class="timer-form-label">持续时间</text>
+        <view class="timer-picker-row" v-if="taskTypes[timerForm.type].cmd === 'trigger_servo'">
+          <view class="timer-picker"><text style="color:#999">无</text></view>
+        </view>
+        <view class="timer-picker-row" v-else>
+          <picker mode="selector" :range="durationLabels" @change="onDurationChange">
+            <view class="timer-picker">
+              {{ timerForm.durationLabel }}
+            </view>
+          </picker>
+        </view>
+
+        <view class="dialog-buttons" style="margin-top: 40rpx;">
+          <button class="dialog-btn dialog-cancel" @click="closeTimerDialog">取消</button>
+          <button class="dialog-btn dialog-confirm" @click="confirmTimer">确认</button>
+        </view>
+      </view>
     </view>
 
     <!-- 重命名弹窗 -->
@@ -200,7 +283,7 @@
 </template>
 
 <script>
-import { getDeviceStatus, sendControlCommand } from '@/utils/api'
+import { getDeviceStatus, sendControlCommand, getTimers, saveTimers, deleteTimer as deleteTimerApi } from '@/utils/api'
 import { getPhoneNumber } from '@/utils/storage'
 
 export default {
@@ -233,7 +316,55 @@ export default {
       wsConnected: false,
       wsReconnectTimer: null,
       servoTimer: null,
-      servoStartTime: 0
+      servoStartTime: 0,
+      // 定时任务
+      timers: [],
+      timerDialogVisible: false,
+      editingTimer: null,
+      timerForm: {
+        id: '',
+        name: '',
+        hour: 8,
+        minute: 0,
+        type: 0,
+        cmd: 'trigger_servo',
+        params: {},
+        duration: 0,
+        durationLabel: '不停止'
+      },
+      hours: Array.from({ length: 24 }, (_, i) => ('0' + i).slice(-2)),
+      minutes: Array.from({ length: 60 }, (_, i) => ('0' + i).slice(-2)),
+      taskTypes: [
+        { label: '喂鱼（舵机）', cmd: 'trigger_servo', params: {} },
+        { label: '换水1档（水泵1 level=1）', cmd: 'set_pump', params: { pump: 1, level: 1 } },
+        { label: '换水2档（水泵1 level=2）', cmd: 'set_pump', params: { pump: 1, level: 2 } },
+        { label: '换水3档（水泵1 level=3）', cmd: 'set_pump', params: { pump: 1, level: 3 } },
+        { label: '加气1档（气泵 level=1）', cmd: 'set_air_pump', params: { level: 1 } },
+        { label: '加气2档（气泵 level=2）', cmd: 'set_air_pump', params: { level: 2 } },
+        { label: '加气3档（气泵 level=3）', cmd: 'set_air_pump', params: { level: 3 } },
+        { label: '开灯1档（灯条 level=1）', cmd: 'set_light', params: { level: 1 } },
+        { label: '开灯2档（level=2）', cmd: 'set_light', params: { level: 2 } },
+        { label: '开灯3档（level=3）', cmd: 'set_light', params: { level: 3 } },
+        { label: '风扇1档', cmd: 'set_fan', params: { level: 1 } },
+        { label: '风扇2档', cmd: 'set_fan', params: { level: 2 } },
+        { label: '风扇3档', cmd: 'set_fan', params: { level: 3 } }
+      ],
+      durationOptions: [
+        { label: '不停止', value: 0 },
+        { label: '1分钟', value: 1 },
+        { label: '5分钟', value: 5 },
+        { label: '10分钟', value: 10 },
+        { label: '30分钟', value: 30 },
+        { label: '60分钟', value: 60 }
+      ]
+    }
+  },
+  computed: {
+    taskTypeLabels() {
+      return this.taskTypes.map(t => t.label)
+    },
+    durationLabels() {
+      return this.durationOptions.map(d => d.label)
     }
   },
   onLoad(options) {
@@ -244,6 +375,7 @@ export default {
     }
     
     this.loadStatus()
+    this.loadTimers()
     
     // 连接 WebSocket 接收实时推送
     this.connectWS()
@@ -384,6 +516,13 @@ export default {
     
     updateStatusFromWS(msg) {
       const s = msg.status || {}
+      const moving = s.servoMoving || false
+      if (moving && !this.servoStartTime) {
+        this.servoStartTime = Date.now()
+      }
+      if (!moving) {
+        this.servoStartTime = 0
+      }
       this.status = {
         online: msg.online || false,
         pwm1Level: s.pwm1Level || 0,
@@ -397,6 +536,8 @@ export default {
         servoMoving: s.servoMoving || false,
         adcWQVoltage: s.adcWQVoltage || 0,
         adcTempVoltage: s.adcTempVoltage || 0,
+        tdsValue: s.tdsValue || 0,
+        waterTemperature: s.waterTemperature || 0,
         systemPowered: s.systemPowered !== false
       }
       this.lastUpdateTime = new Date().toLocaleTimeString()
@@ -407,6 +548,13 @@ export default {
         const res = await getDeviceStatus(this.deviceKey)
         if (res.success) {
           const s = res.status || {}
+          const moving = s.servoMoving || false
+          if (moving && !this.servoStartTime) {
+            this.servoStartTime = Date.now()
+          }
+          if (!moving) {
+            this.servoStartTime = 0
+          }
           this.status = {
             online: res.online || false,
             pwm1Level: s.pwm1Level || 0,
@@ -420,6 +568,8 @@ export default {
             servoMoving: s.servoMoving || false,
             adcWQVoltage: s.adcWQVoltage || 0,
             adcTempVoltage: s.adcTempVoltage || 0,
+            tdsValue: s.tdsValue || 0,
+            waterTemperature: s.waterTemperature || 0,
             systemPowered: s.systemPowered !== false
           }
           this.lastUpdateTime = new Date().toLocaleTimeString()
@@ -583,6 +733,149 @@ export default {
         }
       } catch (error) {
         uni.showToast({ title: '操作失败', icon: 'none' })
+      }
+    },
+
+    // ===== 定时任务 =====
+    getTaskTypeLabel(timer) {
+      const type = this.taskTypes.find(t => t.cmd === timer.cmd && JSON.stringify(t.params) === JSON.stringify(timer.params))
+      return type ? type.label : '未知任务'
+    },
+
+    async loadTimers() {
+      try {
+        const res = await getTimers(this.deviceKey)
+        if (res.success && res.timers) {
+          this.timers = res.timers
+        }
+      } catch (error) {
+        // 静默失败，使用空列表
+        this.timers = []
+      }
+    },
+
+    openTimerDialog(timer) {
+      if (timer) {
+        this.editingTimer = timer
+        const typeIndex = this.taskTypes.findIndex(t => t.cmd === timer.cmd && JSON.stringify(t.params) === JSON.stringify(timer.params))
+        const dur = this.durationOptions.find(d => d.value === (timer.duration / 60))
+        this.timerForm = {
+          id: timer.id,
+          name: timer.name,
+          hour: timer.hour,
+          minute: timer.minute,
+          type: typeIndex >= 0 ? typeIndex : 0,
+          cmd: timer.cmd,
+          params: timer.params,
+          duration: timer.duration / 60, // 转为分钟
+          durationLabel: dur ? dur.label : '不停止'
+        }
+      } else {
+        this.editingTimer = null
+        this.timerForm = {
+          id: '',
+          name: '',
+          hour: 8,
+          minute: 0,
+          type: 0,
+          cmd: 'trigger_servo',
+          params: {},
+          duration: 0,
+          durationLabel: '不停止'
+        }
+      }
+      this.timerDialogVisible = true
+    },
+
+    closeTimerDialog() {
+      this.timerDialogVisible = false
+      this.editingTimer = null
+    },
+
+    onTimeChange(e) {
+      const vals = e.detail.value
+      this.timerForm.hour = parseInt(vals[0])
+      this.timerForm.minute = parseInt(vals[1])
+    },
+
+    onTaskTypeChange(e) {
+      const idx = e.detail.value
+      this.timerForm.type = idx
+      const type = this.taskTypes[idx]
+      this.timerForm.cmd = type.cmd
+      this.timerForm.params = { ...type.params }
+    },
+
+    onDurationChange(e) {
+      const idx = e.detail.value
+      const opt = this.durationOptions[idx]
+      this.timerForm.duration = opt.value
+      this.timerForm.durationLabel = opt.label
+    },
+
+    confirmTimer() {
+      if (!this.timerForm.name.trim()) {
+        uni.showToast({ title: '请输入任务名称', icon: 'none' })
+        return
+      }
+
+      const timerData = {
+        id: this.timerForm.id || 'timer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        name: this.timerForm.name.trim(),
+        hour: this.timerForm.hour,
+        minute: this.timerForm.minute,
+        type: this.timerForm.type,
+        cmd: this.timerForm.cmd,
+        params: this.timerForm.params,
+        duration: this.timerForm.duration * 60, // 转为秒
+        enabled: true
+      }
+
+      if (this.editingTimer) {
+        const idx = this.timers.findIndex(t => t.id === this.editingTimer.id)
+        if (idx >= 0) {
+          this.timers[idx] = timerData
+        }
+      } else {
+        this.timers.push(timerData)
+      }
+
+      this.closeTimerDialog()
+      this.saveAllTimers()
+    },
+
+    async handleDeleteTimer(timer) {
+      uni.showModal({
+        title: '确认删除',
+        content: '确定要删除定时任务"' + timer.name + '"吗？',
+        success: async (res) => {
+          if (res.confirm) {
+            try {
+              const result = await deleteTimerApi(this.deviceKey, timer.id)
+              if (result.success) {
+                this.timers = this.timers.filter(t => t.id !== timer.id)
+                uni.showToast({ title: '删除成功', icon: 'success' })
+              } else {
+                uni.showToast({ title: result.message || '删除失败', icon: 'none' })
+              }
+            } catch (e) {
+              uni.showToast({ title: '删除失败', icon: 'none' })
+            }
+          }
+        }
+      })
+    },
+
+    toggleTimer(timer) {
+      timer.enabled = !timer.enabled
+      this.saveAllTimers()
+    },
+
+    async saveAllTimers() {
+      try {
+        await saveTimers(this.deviceKey, this.timers)
+      } catch (error) {
+        uni.showToast({ title: '保存失败', icon: 'none' })
       }
     }
   }
@@ -856,5 +1149,131 @@ export default {
 .dialog-confirm {
   background: #1a73e8;
   color: #fff;
+}
+
+/* 定时任务 */
+.empty-tip {
+  text-align: center;
+  padding: 30rpx;
+  color: #999;
+  font-size: 26rpx;
+}
+
+.timer-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx 30rpx;
+  margin-bottom: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.timer-card-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.timer-card-top {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.timer-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.timer-time {
+  font-size: 28rpx;
+  color: #1a73e8;
+  font-weight: bold;
+}
+
+.timer-desc {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.timer-duration {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.timer-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.timer-actions {
+  display: flex;
+  gap: 8rpx;
+}
+
+.timer-edit {
+  font-size: 24rpx;
+  color: #1a73e8;
+  padding: 4rpx 12rpx;
+}
+
+.timer-delete {
+  font-size: 24rpx;
+  color: #f44336;
+  padding: 4rpx 12rpx;
+}
+
+.add-timer-btn {
+  width: 100%;
+  height: 80rpx;
+  background: #fff;
+  color: #1a73e8;
+  font-size: 30rpx;
+  border-radius: 16rpx;
+  border: 2rpx dashed #1a73e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10rpx;
+}
+
+.timer-dialog {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.timer-form-label {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 16rpx;
+  margin-top: 20rpx;
+}
+
+.timer-form-label:first-of-type {
+  margin-top: 0;
+}
+
+.timer-picker-row {
+  margin-bottom: 20rpx;
+}
+
+.timer-picker {
+  width: 100%;
+  height: 80rpx;
+  background: #f5f5f5;
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 30rpx;
+  line-height: 80rpx;
+  color: #333;
+  box-sizing: border-box;
 }
 </style>

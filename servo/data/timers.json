@@ -1,0 +1,28 @@
+{
+  "1F0C0604": [
+    {
+      "id": "timer_1783079908855_rg8hl9",
+      "name": "换气",
+      "hour": 20,
+      "minute": 5,
+      "type": 4,
+      "cmd": "set_air_pump",
+      "params": {
+        "level": 1
+      },
+      "duration": 60,
+      "enabled": true
+    },
+    {
+      "id": "timer_1783080137808_vmalm2",
+      "name": "喂鱼",
+      "hour": 20,
+      "minute": 5,
+      "type": 0,
+      "cmd": "trigger_servo",
+      "params": {},
+      "duration": 0,
+      "enabled": true
+    }
+  ]
+}
