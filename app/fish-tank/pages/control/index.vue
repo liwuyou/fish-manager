@@ -380,6 +380,11 @@ export default {
     // 连接 WebSocket 接收实时推送
     this.connectWS()
     
+    // 进入页面自动请求最新状态
+    requestDeviceStatus(this.deviceKey).then(() => {
+      setTimeout(() => this.loadStatus(), 800)
+    })
+    
     // 10秒轮询（不管WebSocket是否连接，确保数据更新）
     this.timer = setInterval(() => {
       this.loadStatus()

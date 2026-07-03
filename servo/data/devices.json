@@ -4,9 +4,9 @@
     "mac": "3C:8A:1F:0C:06:04",
     "phone": "18154385008",
     "online": true,
-    "last_online": 1783088926,
+    "last_online": 1783090126,
     "status": {
-      "pwm1Level": 0,
+      "pwm1Level": 3,
       "pwm2Level": 0,
       "pwm3Level": 0,
       "airPumpLevel": 0,
@@ -15,10 +15,10 @@
       "relay1State": true,
       "relay2State": false,
       "servoMoving": false,
-      "adcWQVoltage": 0.286886,
-      "adcTempVoltage": 1.219267,
-      "waterTemperature": 23.49761,
-      "tdsValue": 117.2156,
+      "adcWQVoltage": 1.317582,
+      "adcTempVoltage": 1.199121,
+      "waterTemperature": 23.23156,
+      "tdsValue": 514.3152,
       "systemPowered": true
     }
   },
