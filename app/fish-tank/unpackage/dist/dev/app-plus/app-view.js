@@ -2280,12 +2280,12 @@ var render = function () {
                   _c(
                     "v-uni-text",
                     { staticClass: _vm._$g(67, "sc"), attrs: { _i: 67 } },
-                    [_vm._v("温度电压")]
+                    [_vm._v("水温")]
                   ),
                   _c(
                     "v-uni-text",
                     { staticClass: _vm._$g(68, "sc"), attrs: { _i: 68 } },
-                    [_vm._v(_vm._$g(68, "t0-0") + "V")]
+                    [_vm._v(_vm._$g(68, "t0-0") + "°C")]
                   ),
                 ],
                 1

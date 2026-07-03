@@ -85,11 +85,11 @@
 #define STATUS_DEBOUNCE_DELAY 10000   // 状态防抖上报延迟 10秒
 
 // ==================== ADC配置 ====================
-#define ADC_TEMP_CORRECT_ENABLE false   // 是否开启温度电压校准
-// NTC热敏电阻参数（10kΩ @25°C, B=3950, 上拉4kΩ, 供电5V经分压测量）
+#define ADC_TEMP_CORRECT_ENABLE true  // 是否开启5V电压校准（GPIO32测量实际5V）
+// NTC热敏电阻参数（10kΩ @25°C, B=3950, 下拉4kΩ, 5V供电）
 #define NTC_R0          10000   // 25°C时电阻(Ω)
 #define NTC_B           3950    // B值
-#define R_FIXED         4000    // 上拉电阻(Ω)
+#define R_FIXED         4000    // 下拉电阻(Ω)，下拉电路：5V→NTC→ADC→R_FIXED→GND
 #define T0_KELVIN       298.15  // 25°C对应开尔文温度
 
 // ==================== 串口调试 ====================
@@ -488,6 +488,7 @@ void wsEvent(WStype_t type, uint8_t * payload, size_t length) {
       wsConnected = true;
       DPRINTLN("[WS] 连接成功");
       wsSendHello();
+      wsSendStatus();  // 立即上报初始状态（含传感器值）
       playBuzzerTone(BUZZER_TONE_SUCCESS, BUZZER_DURATION_SHORT);
       break;
       
@@ -678,6 +679,10 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
     
   } else if (cmd == "power_on") {
     powerOnSystem();
+    wsSendCmdResult(cmdId, cmd, true);
+    wsSendStatus();
+    
+  } else if (cmd == "request_status") {
     wsSendCmdResult(cmdId, cmd, true);
     wsSendStatus();
     
@@ -872,20 +877,22 @@ void readADC() {
   }
   
   int rawTemp = analogRead(ADC_PIN_WATER_TEMP);
-  adcTempVoltage = rawTemp * 3.3 / 4095.0;
+  float tempV_adc = rawTemp * 3.3 / 4095.0;
+  adcTempVoltage = tempV_adc;
   
+  int rawRef = 0;
+  adcTempRefVoltage = 0;
+  float supplyVCC = 5.0;  // 默认5V供电，开启校准后由GPIO32实测
   #if ADC_TEMP_CORRECT_ENABLE
-  int rawRef = analogRead(ADC_PIN_WATER_TEMP_REF);
+  rawRef = analogRead(ADC_PIN_WATER_TEMP_REF);
   adcTempRefVoltage = rawRef * 3.3 / 4095.0;
-  float actualVCC = adcTempRefVoltage * 2.0;
-  adcTempVoltage = rawTemp * actualVCC / 4095.0;
-  #else
-  float actualVCC = 3.3;
+  supplyVCC = adcTempRefVoltage * 2.0;
   #endif
   
-  // 计算NTC温度
-  if (adcTempVoltage > 0 && adcTempVoltage < actualVCC) {
-    float R_ntc = adcTempVoltage * R_FIXED / (actualVCC - adcTempVoltage);
+  // 计算NTC电阻（下拉电路：supplyVCC→NTC→ADC→R_FIXED→GND）
+  // V_adc固定用3.3V参考换算，supplyVCC仅用于分压公式
+  if (tempV_adc > 0 && tempV_adc < supplyVCC) {
+    float R_ntc = R_FIXED * (supplyVCC - tempV_adc) / tempV_adc;
     float steinhart = log(R_ntc / NTC_R0);
     steinhart /= NTC_B;
     steinhart += 1.0 / T0_KELVIN;
@@ -894,6 +901,14 @@ void readADC() {
   } else {
     waterTemperature = 0;
   }
+  
+  DPRINT("[ADC] rawTemp:"); DPRINT(rawTemp);
+  DPRINT(" V_adc:"); DPRINT(tempV_adc);
+  DPRINT(" rawRef:"); DPRINT(rawRef);
+  DPRINT(" V_ref:"); DPRINT(adcTempRefVoltage);
+  DPRINT(" supply:"); DPRINT(supplyVCC);
+  DPRINT(" R:"); DPRINT((int)(R_FIXED * (supplyVCC - tempV_adc) / tempV_adc));
+  DPRINT(" waterTemp:"); DPRINTLN(waterTemperature);
 }
 
 int getMedianNum(int bArray[], int iFilterLen) {

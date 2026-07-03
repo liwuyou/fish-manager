@@ -176,6 +176,24 @@ def get_devices():
     
     return jsonify({'success': True, 'devices': result})
 
+@app.route('/api/request_status', methods=['POST'])
+def request_device_status():
+    device_key = request.json.get('device_key', '')
+    ws = device_ws.get(device_key)
+    if not ws:
+        return jsonify({'success': False, 'message': '设备离线'}), 500
+    msg = json.dumps({
+        'type': 'cmd',
+        'cmd_id': str(int(time.time() * 1000)),
+        'cmd': 'request_status',
+        'params': {}
+    })
+    try:
+        ws.send(msg)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     device_key = request.args.get('device_key', '')

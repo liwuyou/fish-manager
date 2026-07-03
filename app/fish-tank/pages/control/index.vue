@@ -283,7 +283,7 @@
 </template>
 
 <script>
-import { getDeviceStatus, sendControlCommand, getTimers, saveTimers, deleteTimer as deleteTimerApi } from '@/utils/api'
+import { getDeviceStatus, requestDeviceStatus, sendControlCommand, getTimers, saveTimers, deleteTimer as deleteTimerApi } from '@/utils/api'
 import { getPhoneNumber } from '@/utils/storage'
 
 export default {
@@ -581,8 +581,16 @@ export default {
     
     refreshStatus() {
       uni.showLoading({ title: '刷新中...' })
-      this.loadStatus().then(() => {
-        uni.hideLoading()
+      requestDeviceStatus(this.deviceKey).then(() => {
+        setTimeout(() => {
+          this.loadStatus().then(() => {
+            uni.hideLoading()
+          })
+        }, 800)
+      }).catch(() => {
+        this.loadStatus().then(() => {
+          uni.hideLoading()
+        })
       })
     },
     

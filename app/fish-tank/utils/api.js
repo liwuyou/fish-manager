@@ -85,3 +85,11 @@ export function deleteTimer(deviceKey, timerId) {
     data: { device_key: deviceKey, timer_id: timerId }
   })
 }
+
+export function requestDeviceStatus(deviceKey) {
+  return request({
+    url: '/api/request_status',
+    method: 'POST',
+    data: { device_key: deviceKey }
+  })
+}
