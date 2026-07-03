@@ -103,7 +103,9 @@ export default {
       selectedDevices: [],
       renameVisible: false,
       renameValue: '',
-      renameDevice: null
+      renameDevice: null,
+      ws: null,
+      wsReconnectTimer: null
     }
   },
   computed: {
@@ -120,12 +122,15 @@ export default {
     this.loadDevices()
     this.timer = setInterval(() => {
       this.loadDevices()
-    }, 10000)
+    }, 30000)  // 改为30秒轮询（WebSocket推送实时更新）
+    
+    this.connectWS()
   },
   onUnload() {
     if (this.timer) {
       clearInterval(this.timer)
     }
+    this.disconnectWS()
   },
   methods: {
     getDeviceName(device) {
@@ -158,6 +163,80 @@ export default {
       }
       this.$forceUpdate()
       this.cancelRename()
+    },
+    
+    // ===== WebSocket 实时推送 =====
+    getWSBaseURL() {
+      try {
+        if (window && window.location) {
+          return `ws://${window.location.host}`
+        }
+      } catch (e) {}
+      return 'ws://192.168.2.11:7965'
+    },
+    
+    connectWS() {
+      if (this.ws) return
+      const phone = getPhoneNumber()
+      if (!phone) return
+      
+      try {
+        const baseUrl = this.getWSBaseURL()
+        this.ws = uni.connectSocket({
+          url: `${baseUrl}/ws/client`,
+          success: () => {}
+        })
+        
+        this.ws.onOpen(() => {
+          uni.sendSocketMessage({
+            data: JSON.stringify({ type: 'auth', phone })
+          })
+        })
+        
+        this.ws.onMessage((res) => {
+          try {
+            const msg = JSON.parse(res.data)
+            if (msg.type === 'device_status') {
+              // 设备状态变化，实时更新列表
+              const idx = this.devices.findIndex(d => d.device_key === msg.device_key)
+              if (idx > -1) {
+                this.devices[idx].online = msg.online
+                // 更新状态数据
+                if (msg.status) {
+                  this.devices[idx].status = msg.status
+                }
+                this.lastUpdateTime = new Date().toLocaleTimeString()
+                this.$forceUpdate()
+              }
+            }
+          } catch (e) {}
+        })
+        
+        this.ws.onClose(() => {
+          this.ws = null
+          if (!this.wsReconnectTimer) {
+            this.wsReconnectTimer = setTimeout(() => {
+              this.wsReconnectTimer = null
+              this.connectWS()
+            }, 5000)
+          }
+        })
+        
+        this.ws.onError(() => {})
+      } catch (e) {
+        console.log('WebSocket连接失败', e)
+      }
+    },
+    
+    disconnectWS() {
+      if (this.wsReconnectTimer) {
+        clearTimeout(this.wsReconnectTimer)
+        this.wsReconnectTimer = null
+      }
+      if (this.ws) {
+        try { this.ws.close() } catch (e) {}
+        this.ws = null
+      }
     },
     
     async loadDevices() {

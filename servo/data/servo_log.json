@@ -293,5 +293,197 @@
       "servoMoving": true,
       "systemPowered": true
     }
+  },
+  {
+    "time": 1783071532,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783071610,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783071638,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783071813,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783071857,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783071966,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783071986,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783073165,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783073688,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783074106,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 3,
+      "pwm2Level": 3,
+      "pwm3Level": 3,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": false,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783074577,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
+  },
+  {
+    "time": 1783075017,
+    "device_key": "1F0C0604",
+    "result": {
+      "pwm1Level": 0,
+      "pwm2Level": 0,
+      "pwm3Level": 0,
+      "airPumpLevel": 0,
+      "fanLevel": 0,
+      "uvLightOn": false,
+      "relay1State": true,
+      "relay2State": false,
+      "servoMoving": true,
+      "systemPowered": true
+    }
   }
 ]

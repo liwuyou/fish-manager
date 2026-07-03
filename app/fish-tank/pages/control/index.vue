@@ -201,6 +201,7 @@
 
 <script>
 import { getDeviceStatus, sendControlCommand } from '@/utils/api'
+import { getPhoneNumber } from '@/utils/storage'
 
 export default {
   data() {
@@ -227,7 +228,12 @@ export default {
       renameVisible: false,
       renameValue: '',
       renameTarget: '',
-      renameDefault: ''
+      renameDefault: '',
+      ws: null,
+      wsConnected: false,
+      wsReconnectTimer: null,
+      servoTimer: null,
+      servoStartTime: 0
     }
   },
   onLoad(options) {
@@ -238,14 +244,29 @@ export default {
     }
     
     this.loadStatus()
+    
+    // 连接 WebSocket 接收实时推送
+    this.connectWS()
+    
+    // 10秒轮询（不管WebSocket是否连接，确保数据更新）
     this.timer = setInterval(() => {
       this.loadStatus()
-    }, 5000)
+      this.checkServoTimeout()
+    }, 10000)
+    
+    // 舵机超时检测（每2秒检查一次）
+    this.servoTimer = setInterval(() => {
+      this.checkServoTimeout()
+    }, 2000)
   },
   onUnload() {
     if (this.timer) {
       clearInterval(this.timer)
     }
+    if (this.servoTimer) {
+      clearInterval(this.servoTimer)
+    }
+    this.disconnectWS()
   },
   methods: {
     getCtrlName(target, defaultName) {
@@ -281,6 +302,104 @@ export default {
         uni.showToast({ title: '已恢复默认名称', icon: 'none' })
       }
       this.cancelRename()
+    },
+    
+    // ===== WebSocket 实时推送 =====
+    getWSBaseURL() {
+      // H5开发模式：使用当前页面地址
+      // 原生App模式：使用配置的服务器地址
+      try {
+        if (window && window.location) {
+          return `ws://${window.location.host}`
+        }
+      } catch (e) {}
+      // 默认使用服务器地址
+      return 'ws://192.168.2.11:7965'
+    },
+    
+    connectWS() {
+      if (this.ws) return
+      const phone = getPhoneNumber()
+      if (!phone) return
+      
+      try {
+        const baseUrl = this.getWSBaseURL()
+        this.ws = uni.connectSocket({
+          url: `${baseUrl}/ws/client`,
+          success: () => {}
+        })
+        
+        this.ws.onOpen(() => {
+          this.wsConnected = true
+          // 发送认证
+          uni.sendSocketMessage({
+            data: JSON.stringify({ type: 'auth', phone })
+          })
+          // 订阅当前设备
+          uni.sendSocketMessage({
+            data: JSON.stringify({ type: 'subscribe', device_key: this.deviceKey })
+          })
+        })
+        
+        this.ws.onMessage((res) => {
+          try {
+            const msg = JSON.parse(res.data)
+            if (msg.type === 'device_status' && msg.device_key === this.deviceKey) {
+              this.updateStatusFromWS(msg)
+            }
+          } catch (e) {}
+        })
+        
+        this.ws.onClose(() => {
+          this.wsConnected = false
+          this.ws = null
+          // 3秒后自动重连
+          if (!this.wsReconnectTimer) {
+            this.wsReconnectTimer = setTimeout(() => {
+              this.wsReconnectTimer = null
+              this.connectWS()
+            }, 3000)
+          }
+        })
+        
+        this.ws.onError(() => {
+          this.wsConnected = false
+        })
+      } catch (e) {
+        console.log('WebSocket连接失败，使用HTTP轮询', e)
+      }
+    },
+    
+    disconnectWS() {
+      if (this.wsReconnectTimer) {
+        clearTimeout(this.wsReconnectTimer)
+        this.wsReconnectTimer = null
+      }
+      if (this.ws) {
+        this.ws.close()
+        this.ws = null
+        this.wsConnected = false
+      }
+    },
+    
+    updateStatusFromWS(msg) {
+      const s = msg.status || {}
+      this.status = {
+        online: msg.online || false,
+        pwm1Level: s.pwm1Level || 0,
+        pwm2Level: s.pwm2Level || 0,
+        pwm3Level: s.pwm3Level || 0,
+        airPumpLevel: s.airPumpLevel || 0,
+        fanLevel: s.fanLevel || 0,
+        uvLightOn: s.uvLightOn || false,
+        relay1State: s.relay1State || false,
+        relay2State: s.relay2State || false,
+        servoMoving: s.servoMoving || false,
+        adcWQVoltage: s.adcWQVoltage || 0,
+        adcTempVoltage: s.adcTempVoltage || 0,
+        systemPowered: s.systemPowered !== false
+      }
+      this.lastUpdateTime = new Date().toLocaleTimeString()
     },
     
     async loadStatus() {
@@ -411,12 +530,24 @@ export default {
         const res = await sendControlCommand(this.deviceKey, 'trigger_servo', {})
         if (res.success) {
           this.status.servoMoving = true
+          this.servoStartTime = Date.now()  // 记录启动时间
           uni.showToast({ title: '舵机已启动', icon: 'success' })
         } else {
           uni.showToast({ title: res.message || '启动失败', icon: 'none' })
         }
       } catch (error) {
         uni.showToast({ title: '启动失败', icon: 'none' })
+      }
+    },
+    
+    checkServoTimeout() {
+      // 舵机运行超15秒自动复位（舵机完整周期约8秒）
+      if (this.status.servoMoving && this.servoStartTime > 0) {
+        const elapsed = (Date.now() - this.servoStartTime) / 1000
+        if (elapsed > 8) {
+          this.status.servoMoving = false
+          this.servoStartTime = 0
+        }
       }
     },
     

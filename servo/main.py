@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import json
 import os
 import time
@@ -12,13 +13,19 @@ DEVICES_FILE = os.path.join(DATA_DIR, 'devices.json')
 SERVO_LOG_FILE = os.path.join(DATA_DIR, 'servo_log.json')
 
 HEARTBEAT_TIMEOUT = 60
+SAVE_INTERVAL = 3  # 批量写入间隔（秒）
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 sock = Sock(app)
 
+# ==================== 内存缓存 ====================
+users = {}
 devices = {}
-device_ws = {}
-cmd_callbacks = {}
+servo_log = []
+
+# 批量写入控制
+_save_pending = False
+_save_lock = threading.Lock()
 
 def load_json(filepath, default):
     if os.path.exists(filepath):
@@ -33,10 +40,72 @@ def save_json(filepath, data):
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+def _background_save():
+    """后台定时写入线程"""
+    while True:
+        time.sleep(SAVE_INTERVAL)
+        global _save_pending
+        if _save_pending:
+            save_json(DEVICES_FILE, devices)
+            save_json(USERS_FILE, users)
+            _save_pending = False
+
+def _schedule_save():
+    """标记需要写入（防抖，3秒内多次修改只写一次）"""
+    global _save_pending
+    _save_pending = True
+
+def _save_now():
+    """立即强制写入"""
+    global _save_pending
+    save_json(DEVICES_FILE, devices)
+    save_json(USERS_FILE, users)
+    _save_pending = False
+
+# ==================== App WebSocket 推送 ====================
+client_subs = {}       # {device_key: set(ws)}
+client_subs_lock = threading.Lock()
+
+def broadcast_to_clients(device_key, msg):
+    """向订阅了该设备的所有App客户端推送"""
+    with client_subs_lock:
+        subs = client_subs.get(device_key)
+        if not subs:
+            return
+        dead = set()
+        for ws in subs:
+            try:
+                ws.send(json.dumps(msg))
+            except:
+                dead.add(ws)
+        if dead:
+            subs -= dead
+
+def subscribe_client(ws, device_key):
+    """客户端订阅设备状态"""
+    with client_subs_lock:
+        if device_key not in client_subs:
+            client_subs[device_key] = set()
+        client_subs[device_key].add(ws)
+
+def unsubscribe_client(ws):
+    """客户端断开时清理所有订阅"""
+    with client_subs_lock:
+        for device_key, subs in list(client_subs.items()):
+            subs.discard(ws)
+            if not subs:
+                del client_subs[device_key]
+
+# ==================== 初始化 ====================
 users = load_json(USERS_FILE, {})
 devices = load_json(DEVICES_FILE, {})
 servo_log = load_json(SERVO_LOG_FILE, [])
 
+# 启动后台写入线程
+save_thread = threading.Thread(target=_background_save, daemon=True)
+save_thread.start()
+
+# ==================== HTTP 路由 ====================
 @app.route('/')
 def index():
     return send_from_directory(STATIC_DIR, 'index.html')
@@ -62,15 +131,13 @@ def bind_device():
     else:
         devices[device_key]['phone'] = phone
     
-    save_json(DEVICES_FILE, devices)
-    
     if phone not in users:
         users[phone] = []
     
     if device_key not in users[phone]:
         users[phone].append(device_key)
-        save_json(USERS_FILE, users)
     
+    _save_now()  # 绑定立即写
     return jsonify({'success': True, 'message': '绑定成功'})
 
 @app.route('/api/unbind', methods=['POST'])
@@ -81,8 +148,8 @@ def unbind_device():
     
     if phone in users and device_key in users[phone]:
         users[phone].remove(device_key)
-        save_json(USERS_FILE, users)
     
+    _save_now()  # 解绑立即写
     return jsonify({'success': True})
 
 @app.route('/api/devices', methods=['GET'])
@@ -92,7 +159,7 @@ def get_devices():
         return jsonify({'success': True, 'devices': []})
     
     result = []
-    for device_key in users[phone]:
+    for device_key in users.get(phone, []):
         dev = devices.get(device_key, {})
         result.append({
             'device_key': device_key,
@@ -141,6 +208,9 @@ def control_device():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+# ==================== WebSocket: 设备 ====================
+device_ws = {}
+
 @sock.route('/ws/device')
 def device_ws_handler(ws):
     device_key = None
@@ -175,24 +245,39 @@ def device_ws_handler(ws):
                         devices[device_key]['last_online'] = int(time.time())
                         if msg.get('mac'):
                             devices[device_key]['mac'] = msg.get('mac', '')
-                    save_json(DEVICES_FILE, devices)
+                    _schedule_save()
                     print(f"[DEVICE] {device_key} 已连接")
                     
                     ws.send(json.dumps({'type': 'hello_ok'}))
+                    
+                    # 推送上线通知
+                    broadcast_to_clients(device_key, {
+                        'type': 'device_status',
+                        'device_key': device_key,
+                        'online': True,
+                        'status': devices[device_key].get('status', {})
+                    })
             
             elif msg_type == 'heartbeat':
                 if device_key and device_key in devices:
                     devices[device_key]['online'] = True
                     devices[device_key]['last_online'] = int(time.time())
-                    save_json(DEVICES_FILE, devices)
-                    print(f"[HEARTBEAT] {device_key}")
+                    _schedule_save()
             
             elif msg_type == 'status':
                 if device_key and device_key in devices:
                     devices[device_key]['status'] = msg.get('status', {})
                     devices[device_key]['online'] = True
                     devices[device_key]['last_online'] = int(time.time())
-                    save_json(DEVICES_FILE, devices)
+                    _schedule_save()
+                    
+                    # 推送到App客户端
+                    broadcast_to_clients(device_key, {
+                        'type': 'device_status',
+                        'device_key': device_key,
+                        'online': True,
+                        'status': msg.get('status', {})
+                    })
             
             elif msg_type == 'cmd_result':
                 cmd_id = msg.get('cmd_id', '')
@@ -217,22 +302,92 @@ def device_ws_handler(ws):
                 del device_ws[device_key]
             if device_key in devices:
                 devices[device_key]['online'] = False
-                save_json(DEVICES_FILE, devices)
+                _schedule_save()
             print(f"[DEVICE] {device_key} 已断开")
+            
+            broadcast_to_clients(device_key, {
+                'type': 'device_status',
+                'device_key': device_key,
+                'online': False,
+                'status': devices.get(device_key, {}).get('status', {})
+            })
 
+# ==================== WebSocket: App客户端 ====================
+@sock.route('/ws/client')
+def client_ws_handler(ws):
+    phone = None
+    try:
+        while True:
+            data = ws.receive()
+            if data is None:
+                break
+            try:
+                msg = json.loads(data)
+            except:
+                continue
+            
+            msg_type = msg.get('type', '')
+            
+            if msg_type == 'auth':
+                phone = msg.get('phone', '')
+                if phone:
+                    # 订阅名下所有设备
+                    for device_key in users.get(phone, []):
+                        subscribe_client(ws, device_key)
+                        # 推送当前状态
+                        dev = devices.get(device_key, {})
+                        ws.send(json.dumps({
+                            'type': 'device_status',
+                            'device_key': device_key,
+                            'online': dev.get('online', False),
+                            'status': dev.get('status', {})
+                        }))
+                    print(f"[CLIENT] {phone} 已连接")
+            
+            elif msg_type == 'subscribe':
+                device_key = msg.get('device_key', '')
+                if device_key:
+                    subscribe_client(ws, device_key)
+                    # 推送当前状态
+                    dev = devices.get(device_key, {})
+                    ws.send(json.dumps({
+                        'type': 'device_status',
+                        'device_key': device_key,
+                        'online': dev.get('online', False),
+                        'status': dev.get('status', {})
+                    }))
+    
+    except Exception as e:
+        print(f"[CLIENT_WS_ERROR] {phone}: {e}")
+    finally:
+        if phone:
+            print(f"[CLIENT] {phone} 已断开")
+        unsubscribe_client(ws)
+
+# ==================== 离线检测 ====================
 def check_offline_devices():
     while True:
+        time.sleep(10)
         try:
             now = int(time.time())
+            changed = False
             for device_key, dev in devices.items():
                 if dev.get('online') and now - dev.get('last_online', 0) > HEARTBEAT_TIMEOUT:
                     dev['online'] = False
+                    changed = True
                     print(f"[DEVICE] {device_key} 超时离线")
-            save_json(DEVICES_FILE, devices)
+                    broadcast_to_clients(device_key, {
+                        'type': 'device_status',
+                        'device_key': device_key,
+                        'online': False,
+                        'status': dev.get('status', {})
+                    })
+            if changed:
+                _schedule_save()
         except:
             pass
-        time.sleep(10)
 
+# ==================== 启动 ====================
 if __name__ == '__main__':
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(STATIC_DIR, exist_ok=True)
@@ -241,11 +396,18 @@ if __name__ == '__main__':
     offline_thread.start()
     
     print("=" * 50)
-    print("  养鱼生态箱 - 远程控制服务器")
+    print("  养鱼生态箱 - 远程控制服务器 v2.0")
     print("=" * 50)
     print(f"  HTTP 端口: 7965")
-    print(f"  WebSocket: ws://<IP>:7965/ws/device")
+    print(f"  设备WebSocket: ws://<IP>:7965/ws/device")
+    print(f"  客户端WebSocket: ws://<IP>:7965/ws/client")
     print(f"  数据目录: {DATA_DIR}")
+    print(f"  批量保存间隔: {SAVE_INTERVAL}秒")
+    print("=" * 50)
+    print("  💡 生产环境推荐:")
+    print("     pip install waitress")
+    print("     waitress-serve --host=0.0.0.0 --port=7965 --threads=8 main:app")
     print("=" * 50)
     
+    # 开发模式使用 Flask 内置服务器
     app.run(host='0.0.0.0', port=7965, debug=False, threaded=True)

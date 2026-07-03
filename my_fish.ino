@@ -11,7 +11,7 @@
 // ==================== 前置信息 ====================
 // ESP32-wroom, 128MB flash, 4MB psram, 用于控制养鱼生态箱
 // 作者: 李无忧
-// 版本: 3.0.0
+// 版本: 3.0.1
 // 日期: 2026-6-30
 // 描述: WiFi + WebSocket远程控制版本
 
@@ -78,7 +78,7 @@
 #define WS_SERVER_PATH "/ws/device"
 #define WS_HEARTBEAT_INTERVAL 30000  // WebSocket心跳间隔 30秒
 #define WS_RECONNECT_DELAY  5000     // 重连延迟 5秒
-#define STATUS_REPORT_INTERVAL 10000  // 状态上报间隔 10秒
+#define STATUS_DEBOUNCE_DELAY 10000   // 状态防抖上报延迟 10秒
 
 // ==================== ADC配置 ====================
 #define ADC_TEMP_CORRECT_ENABLE false  // 是否开启温度电压校准
@@ -152,7 +152,8 @@ WebSocketsClient webSocket;
 bool wsConnected = false;
 bool wsInitialized = false;
 unsigned long lastHeartbeat = 0;
-unsigned long lastStatusReport = 0;
+unsigned long lastStatusTriggerTime = 0;
+bool statusReportPending = false;
 unsigned long lastWsAttempt = 0;
 unsigned long lastWsLoopTime = 0;
 bool wsReconnecting = false;
@@ -552,6 +553,11 @@ void wsSendStatus() {
   webSocket.sendTXT(msg);
 }
 
+void scheduleStatusReport() {
+  lastStatusTriggerTime = millis();
+  statusReportPending = true;
+}
+
 void wsSendCmdResult(String cmdId, String cmd, bool success, String message) {
   DynamicJsonDocument doc(128);
   doc["type"] = "cmd_result";
@@ -599,7 +605,7 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
       ledcWrite(PWM2_PIN, pwmValues[pwm2Level]);
     }
     wsSendCmdResult(cmdId, cmd, true);
-    wsSendStatus(); // 立即发送完整状态
+    wsSendStatus();
     
   } else if (cmd == "set_light") {
     int level = params["level"] | 0;
@@ -637,7 +643,7 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
     relay2State = on;
     digitalWrite(RELAY2_PIN, on ? HIGH : LOW);
     wsSendCmdResult(cmdId, cmd, true);
-    wsSendStatus(); // 立即发送完整状态
+    wsSendStatus();
     
   } else if (cmd == "trigger_servo") {
     if (servoMoving) {
@@ -647,16 +653,17 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
     servoMoving = true;
     servoMoveStartTime = millis();
     wsSendCmdResult(cmdId, cmd, true, "舵机已启动");
+    wsSendStatus();
     
   } else if (cmd == "power_off") {
     powerOffSystem();
     wsSendCmdResult(cmdId, cmd, true);
-    wsSendStatus(); // 立即发送完整状态
+    wsSendStatus();
     
   } else if (cmd == "power_on") {
     powerOnSystem();
     wsSendCmdResult(cmdId, cmd, true);
-    wsSendStatus(); // 立即发送完整状态
+    wsSendStatus();
     
   } else {
     wsSendCmdResult(cmdId, cmd, false, "未知命令");
@@ -705,12 +712,14 @@ void handleButtons() {
         playBuzzerTone(BUZZER_TONE_ERROR, BUZZER_DURATION_SHORT);
       }
       ledcWrite(PWM1_PIN, pwmValues[pwm1Level]);
+      scheduleStatusReport();
     }
   } else if (button2 == HIGH && lastButton2 == LOW && !button2LongPressed) {
     if (pwm1Level > 0) {
       pwm1Level = (pwm1Level % 3) + 1;
       ledcWrite(PWM1_PIN, pwmValues[pwm1Level]);
       playBuzzerTone(BUZZER_TONE_SHORT, BUZZER_DURATION_SHORT);
+      scheduleStatusReport();
     }
   }
   lastButton2 = button2;
@@ -730,12 +739,14 @@ void handleButtons() {
         playBuzzerTone(BUZZER_TONE_ERROR, BUZZER_DURATION_SHORT);
       }
       ledcWrite(PWM3_PIN, pwmValues[pwm3Level]);
+      scheduleStatusReport();
     }
   } else if (button4 == HIGH && lastButton4 == LOW && !button4LongPressed) {
     if (pwm3Level > 0) {
       pwm3Level = (pwm3Level % 3) + 1;
       ledcWrite(PWM3_PIN, pwmValues[pwm3Level]);
       playBuzzerTone(BUZZER_TONE_SHORT, BUZZER_DURATION_SHORT);
+      scheduleStatusReport();
     }
   }
   lastButton4 = button4;
@@ -745,6 +756,7 @@ void handleButtons() {
     servoMoving = true;
     servoMoveStartTime = now;
     playBuzzerTone(BUZZER_TONE_SHORT, BUZZER_DURATION_SHORT);
+    scheduleStatusReport();
   }
   lastButton5 = button5;
 }
@@ -907,6 +919,7 @@ void powerOnSystem() {
   
   DPRINTLN("[POWER] 开机");
   playBuzzerTone(BUZZER_TONE_SUCCESS, BUZZER_DURATION_SHORT);
+  scheduleStatusReport();
 }
 
 void powerOffSystem() {
@@ -942,6 +955,7 @@ void powerOffSystem() {
   
   DPRINTLN("[POWER] 关机");
   playBuzzerTone(BUZZER_TONE_ERROR, BUZZER_DURATION_LONG);
+  scheduleStatusReport();
 }
 
 // ==================== setup ====================
@@ -1034,7 +1048,7 @@ void loop() {
   updateServo();
   
   static unsigned long lastADCRead = 0;
-  if (millis() - lastADCRead > 100) {
+  if (millis() - lastADCRead > 1000) {
     lastADCRead = millis();
     readADC();
   }
@@ -1065,9 +1079,9 @@ void loop() {
     wsSendHeartbeat();
   }
   
-  // 状态上报
-  if (wsConnected && millis() - lastStatusReport > STATUS_REPORT_INTERVAL) {
-    lastStatusReport = millis();
+  // 防抖状态上报（触发操作后10秒内合并上报）
+  if (wsConnected && statusReportPending && millis() - lastStatusTriggerTime > STATUS_DEBOUNCE_DELAY) {
+    statusReportPending = false;
     wsSendStatus();
   }
   
