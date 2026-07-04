@@ -861,6 +861,7 @@ void updateServo() {
       } else {
         servoPhase = 0;
         servoMoving = false;
+        if (wsConnected) wsSendStatus();
         playBuzzerTone(BUZZER_TONE_SUCCESS, BUZZER_DURATION_SHORT);
       }
     }
