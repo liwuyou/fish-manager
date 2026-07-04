@@ -172,6 +172,13 @@ unsigned long lastWsAttempt = 0;
 unsigned long lastWsLoopTime = 0;
 bool wsReconnecting = false;
 
+// 非阻塞辅助启动
+int kickStartPin = -1;
+int kickStartTargetLevel = 0;
+unsigned long kickStartUntil = 0;
+bool kickStartActive = false;
+const int* kickStartPwmVals = NULL;
+
 // ==================== 函数声明 ====================
 void handleButtons();
 void updateOLED();
@@ -199,6 +206,7 @@ void wsSendHello();
 void wsSendHeartbeat();
 void wsSendStatus();
 void wsSendCmdResult(String cmdId, String cmd, bool success, String message = "");
+void kickStartLedcWrite(int pin, int* levelVar, int newLevel, const int pwmVals[]);
 void handleWsCmd(String cmdId, String cmd, JsonObject params);
 
 // ==================== 蜂鸣器 ====================
@@ -575,6 +583,21 @@ void scheduleStatusReport() {
   statusReportPending = true;
 }
 
+void kickStartLedcWrite(int pin, int* levelVar, int newLevel, const int pwmVals[]) {
+  int oldLevel = *levelVar;
+  *levelVar = newLevel;
+  if (oldLevel == 0 && newLevel == 1) {
+    ledcWrite(pin, pwmVals[3]);
+    kickStartPin = pin;
+    kickStartTargetLevel = newLevel;
+    kickStartPwmVals = pwmVals;
+    kickStartUntil = millis() + 100;
+    kickStartActive = true;
+    return;
+  }
+  ledcWrite(pin, pwmVals[newLevel]);
+}
+
 void wsSendCmdResult(String cmdId, String cmd, bool success, String message) {
   DynamicJsonDocument doc(128);
   doc["type"] = "cmd_result";
@@ -615,11 +638,9 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
     level = constrain(level, 0, 3);
     
     if (pump == 1) {
-      pwm1Level = level;
-      ledcWrite(PWM1_PIN, pwmValues[pwm1Level]);
+      kickStartLedcWrite(PWM1_PIN, &pwm1Level, level, pwmValues);
     } else if (pump == 2) {
-      pwm2Level = level;
-      ledcWrite(PWM2_PIN, pwmValues[pwm2Level]);
+      kickStartLedcWrite(PWM2_PIN, &pwm2Level, level, pwmValues);
     }
     wsSendCmdResult(cmdId, cmd, true);
     wsSendStatus();
@@ -635,16 +656,14 @@ void handleWsCmd(String cmdId, String cmd, JsonObject params) {
   } else if (cmd == "set_air_pump") {
     int level = params["level"] | 0;
     level = constrain(level, 0, 3);
-    airPumpLevel = level;
-    ledcWrite(PWM_AIR_PUMP_PIN, pwmValues[airPumpLevel]);
+    kickStartLedcWrite(PWM_AIR_PUMP_PIN, &airPumpLevel, level, pwmValues);
     wsSendCmdResult(cmdId, cmd, true);
     wsSendStatus();
     
   } else if (cmd == "set_fan") {
     int level = params["level"] | 0;
     level = constrain(level, 0, 3);
-    fanLevel = level;
-    ledcWrite(PWM_FAN_PIN, pwmValues[fanLevel]);
+    kickStartLedcWrite(PWM_FAN_PIN, &fanLevel, level, pwmValues);
     wsSendCmdResult(cmdId, cmd, true);
     wsSendStatus();
     
@@ -726,13 +745,13 @@ void handleButtons() {
     if (now - button2PressTime >= PUMP_START_DELAY) {
       button2LongPressed = true;
       if (pwm1Level == 0) {
-        pwm1Level = 1;
+        kickStartLedcWrite(PWM1_PIN, &pwm1Level, 1, pwmValues);
         playBuzzerTone(BUZZER_TONE_SUCCESS, BUZZER_DURATION_SHORT);
       } else {
         pwm1Level = 0;
+        ledcWrite(PWM1_PIN, 0);
         playBuzzerTone(BUZZER_TONE_ERROR, BUZZER_DURATION_SHORT);
       }
-      ledcWrite(PWM1_PIN, pwmValues[pwm1Level]);
       scheduleStatusReport();
     }
   } else if (button2 == HIGH && lastButton2 == LOW && !button2LongPressed) {
@@ -1165,6 +1184,12 @@ void loop() {
   if (wsConnected && millis() - lastHeartbeat > WS_HEARTBEAT_INTERVAL) {
     lastHeartbeat = millis();
     wsSendHeartbeat();
+  }
+  
+  // 非阻塞辅助启动回落
+  if (kickStartActive && millis() >= kickStartUntil) {
+    kickStartActive = false;
+    ledcWrite(kickStartPin, kickStartPwmVals[kickStartTargetLevel]);
   }
   
   // 防抖状态上报（触发操作后10秒内合并上报）
