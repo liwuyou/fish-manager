@@ -15,11 +15,11 @@
             "port" : 5173,
             "proxy" : {
                 "/api" : {
-                    "target" : "http://192.168.2.11:7965",
+                    "target" : "http://fishmanager.top:7965",
                     "changeOrigin" : true
                 },
                 "/ws" : {
-                    "target" : "ws://192.168.2.11:7965",
+                    "target" : "ws://fishmanager.top:7965",
                     "changeOrigin" : true,
                     "ws" : true
                 }
