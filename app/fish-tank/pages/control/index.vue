@@ -451,7 +451,7 @@ export default {
         }
       } catch (e) {}
       // 默认使用服务器地址
-      return 'ws://fishmanager.top:7965'
+      return 'ws://112.124.107.159:7965'
     },
     
     connectWS() {
