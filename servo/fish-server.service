@@ -1,0 +1,21 @@
+[Unit]
+Description=养鱼系统服务器 (Fish Tank Server)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=forking
+User=root
+Group=root
+WorkingDirectory=/opt/fish-tank-server
+PIDFile=/var/run/fish-server.pid
+ExecStart=/opt/fish-tank-server/fish-server.sh start
+ExecStop=/opt/fish-tank-server/fish-server.sh stop
+ExecReload=/opt/fish-tank-server/fish-server.sh restart
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
