@@ -115,12 +115,16 @@
       
       <view class="switch-card">
         <text class="switch-label" @click="startRename('uv', 'UV灯')">{{ getCtrlName('uv', 'UV灯') }}</text>
-        <switch :checked="status.uvLightOn || false" @change="setUV" color="#1a73e8" />
+        <view class="custom-switch" :class="status.uvLightOn ? 'on' : 'off'" @click="setUV(!status.uvLightOn)">
+          <view class="custom-switch-knob"></view>
+        </view>
       </view>
       
       <view class="switch-card">
         <text class="switch-label" @click="startRename('relay2', '继电器2')">{{ getCtrlName('relay2', '继电器2') }}</text>
-        <switch :checked="status.relay2State || false" @change="setRelay2" color="#1a73e8" />
+        <view class="custom-switch" :class="status.relay2State ? 'on' : 'off'" @click="setRelay2(!status.relay2State)">
+          <view class="custom-switch-knob"></view>
+        </view>
       </view>
     </view>
     
@@ -317,6 +321,7 @@ export default {
       wsReconnectTimer: null,
       servoTimer: null,
       servoStartTime: 0,
+      lastClickTime: 0,
       // 定时任务
       timers: [],
       timerDialogVisible: false,
@@ -410,6 +415,16 @@ export default {
       const key = 'ctrl_name_' + this.deviceKey + '_' + target
       const name = uni.getStorageSync(key)
       return name || defaultName
+    },
+    
+    checkRateLimit() {
+      const now = Date.now()
+      if (now - this.lastClickTime < 1000) {
+        uni.showToast({ title: '操作过快，慢点哟', icon: 'none' })
+        return false
+      }
+      this.lastClickTime = now
+      return true
     },
     
     startRename(target, defaultName) {
@@ -604,6 +619,7 @@ export default {
         uni.showToast({ title: '设备离线', icon: 'none' })
         return
       }
+      if (!this.checkRateLimit()) return
       
       this.status[`pwm${pump}Level`] = level
       
@@ -625,6 +641,7 @@ export default {
         uni.showToast({ title: '设备离线', icon: 'none' })
         return
       }
+      if (!this.checkRateLimit()) return
       
       this.status.pwm3Level = level
       
@@ -643,6 +660,7 @@ export default {
     
     async setAirPump(level) {
       if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
+      if (!this.checkRateLimit()) return
       this.status.airPumpLevel = level
       try {
         const res = await sendControlCommand(this.deviceKey, 'set_air_pump', { level })
@@ -653,6 +671,7 @@ export default {
     
     async setFan(level) {
       if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
+      if (!this.checkRateLimit()) return
       this.status.fanLevel = level
       try {
         const res = await sendControlCommand(this.deviceKey, 'set_fan', { level })
@@ -661,9 +680,9 @@ export default {
       } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
     },
     
-    async setUV(e) {
+    async setUV(on) {
       if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
-      const on = typeof e === 'object' ? e.detail.value : e
+      if (!this.checkRateLimit()) return
       this.status.uvLightOn = on
       try {
         const res = await sendControlCommand(this.deviceKey, 'set_uv', { on })
@@ -672,9 +691,9 @@ export default {
       } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
     },
     
-    async setRelay2(e) {
+    async setRelay2(on) {
       if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
-      const on = typeof e === 'object' ? e.detail.value : e
+      if (!this.checkRateLimit()) return
       this.status.relay2State = on
       try {
         const res = await sendControlCommand(this.deviceKey, 'set_relay2', { on })
@@ -688,6 +707,7 @@ export default {
         uni.showToast({ title: '设备离线或舵机运行中', icon: 'none' })
         return
       }
+      if (!this.checkRateLimit()) return
       
       try {
         const res = await sendControlCommand(this.deviceKey, 'trigger_servo', {})
@@ -735,6 +755,7 @@ export default {
     },
     
     async executePowerCmd(cmd) {
+      if (!this.checkRateLimit()) return
       try {
         const result = await sendControlCommand(this.deviceKey, cmd, {})
         if (result.success) {
@@ -1042,6 +1063,29 @@ export default {
   &:active {
     background: #f0f0f0;
   }
+}
+
+/* 自定义开关 */
+.custom-switch {
+  width: 96rpx;
+  height: 52rpx;
+  border-radius: 26rpx;
+  padding: 4rpx;
+  transition: background 0.2s;
+  position: relative;
+}
+.custom-switch.off { background: #ddd; }
+.custom-switch.on { background: #1a73e8; }
+.custom-switch .custom-switch-knob {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 22rpx;
+  background: #fff;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.2);
+  transition: transform 0.2s;
+}
+.custom-switch.on .custom-switch-knob {
+  transform: translateX(44rpx);
 }
 
 .sensor-grid {
