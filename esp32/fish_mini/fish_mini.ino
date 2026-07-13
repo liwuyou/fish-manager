@@ -384,11 +384,23 @@ void handleRoot() {
   html += "<form id='configForm' action='/save' method='POST'>";
   html += "<label>选择家庭WiFi:</label>";
   html += "<select name='ssid' id='wifiSelect'><option value=''>-- 请选择WiFi --</option></select>";
+  html += "<button type='button' onclick='scanWiFi()' style='background:#2196F3;margin:4px 0;'>🔄 刷新WiFi列表</button>";
   html += "<div id='selectedSSID' style='margin:10px 0;color:#666;'></div>";
   html += "<label>WiFi密码:</label><input type='password' name='password' id='password' placeholder='请输入WiFi密码' required><br>";
   html += "<button type='submit'>保存配置</button>";
   html += "</form>";
   html += "<div id='loadingMsg' class='loading'>正在扫描WiFi...</div>";
+
+  // 显示已保存的WiFi
+  if (!homeWiFiSSID.isEmpty()) {
+    html += "<div class='info' style='font-size:12px;color:#999;'>当前已配置WiFi: " + homeWiFiSSID + "</div>";
+    html += "<form action='/save' method='POST' style='margin-top:8px;' onsubmit='return confirm(\"确定清除WiFi配置？\")'>";
+    html += "<input type='hidden' name='ssid' value=''>";
+    html += "<input type='hidden' name='password' value=''>";
+    html += "<button type='submit' style='background:#f44336;font-size:14px;'>清除WiFi配置</button>";
+    html += "</form>";
+  }
+
   html += "</div>";
   
   if (wifiConnected) {
@@ -396,12 +408,16 @@ void handleRoot() {
   }
   
   html += "<script>";
-  html += "function scanWiFi(){fetch('/scan').then(r=>r.json()).then(d=>{";
-  html += "var s=document.getElementById('wifiSelect');";
-  html += "d.forEach(function(w){var o=document.createElement('option');o.value=w.ssid;o.text=w.ssid;if(w.ssid=='" + homeWiFiSSID + "')o.selected=true;s.appendChild(o);});";
-  html += "document.getElementById('loadingMsg').style.display='none';";
-  html += "});}";
-  html += "scanWiFi();";
+  html += "function scanWiFi(){";
+  html += "var s=document.getElementById('wifiSelect');var l=document.getElementById('loadingMsg');";
+  html += "s.innerHTML='<option value=\"\">-- 扫描中 --</option>';l.style.display='block';l.innerHTML='正在扫描WiFi...';";
+  html += "fetch('/scan').then(function(r){return r.json();}).then(function(d){";
+  html += "s.innerHTML='<option value=\"\">-- 请选择WiFi --</option>';";
+  html += "d.forEach(function(w){var o=document.createElement('option');o.value=w.ssid;o.text=w.ssid+' ('+w.rssi+'dBm)';if(w.ssid=='" + homeWiFiSSID + "')o.selected=true;s.appendChild(o);});";
+  html += "l.style.display='none';";
+  html += "}).catch(function(e){l.innerHTML='⚠️ 扫描失败，点击按钮重试';});";
+  html += "}";
+  html += "setTimeout(scanWiFi,500);";
   html += "</script></body></html>";
   
   server.send(200, "text/html; charset=UTF-8", html);
@@ -411,16 +427,19 @@ void handleSaveConfig() {
   if (server.hasArg("ssid")) homeWiFiSSID = server.arg("ssid");
   if (server.hasArg("password")) homeWiFiPassword = server.arg("password");
   
+  EEPROM.begin(EEPROM_SIZE);
+  // 清除WiFi配置区域
+  for (int i = 0; i < 100; i++) EEPROM.write(EEPROM_WIFI_ADDR + i, 0);
+  
   if (!homeWiFiSSID.isEmpty()) {
-    EEPROM.begin(EEPROM_SIZE);
-    for (int i = 0; i < 100; i++) EEPROM.write(EEPROM_WIFI_ADDR + i, 0);
     int addr = EEPROM_WIFI_ADDR;
     for (int i = 0; i < homeWiFiSSID.length() && i < 50; i++) EEPROM.write(addr++, homeWiFiSSID[i]);
     EEPROM.write(addr++, 0);
     for (int i = 0; i < homeWiFiPassword.length() && i < 50; i++) EEPROM.write(addr++, homeWiFiPassword[i]);
-    EEPROM.commit();
-    EEPROM.end();
+    EEPROM.write(addr++, 0);
   }
+  EEPROM.commit();
+  EEPROM.end();
   
   String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'>";
   html += "<title>配置完成</title><style>";

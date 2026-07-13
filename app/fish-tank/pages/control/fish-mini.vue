@@ -77,24 +77,6 @@
 
       <view class="control-card">
         <view class="control-header">
-          <text class="control-name" @click="startRename('pump2', '水泵2')">{{ getCtrlName('pump2', '水泵2') }}</text>
-          <text class="control-value">{{ pumpLevels[status.pwm2Level] }}</text>
-        </view>
-        <view class="pump-controls">
-          <button
-            v-for="(level, index) in pumpLevels"
-            :key="index"
-            class="level-btn"
-            :class="{ active: status.pwm2Level === index }"
-            @click="setPump(2, index)"
-          >
-            {{ level }}
-          </button>
-        </view>
-      </view>
-
-      <view class="control-card">
-        <view class="control-header">
           <text class="control-name" @click="startRename('airPump', '氧气泵')">{{ getCtrlName('airPump', '氧气泵') }}</text>
           <text class="control-value">{{ pumpLevels[status.airPumpLevel || 0] }}</text>
         </view>
@@ -105,24 +87,6 @@
             class="level-btn"
             :class="{ active: (status.airPumpLevel || 0) === index }"
             @click="setAirPump(index)"
-          >
-            {{ level }}
-          </button>
-        </view>
-      </view>
-
-      <view class="control-card">
-        <view class="control-header">
-          <text class="control-name" @click="startRename('fan', '风扇')">{{ getCtrlName('fan', '风扇') }}</text>
-          <text class="control-value">{{ pumpLevels[status.fanLevel || 0] }}</text>
-        </view>
-        <view class="pump-controls">
-          <button
-            v-for="(level, index) in pumpLevels"
-            :key="'fan'+index"
-            class="level-btn"
-            :class="{ active: (status.fanLevel || 0) === index }"
-            @click="setFan(index)"
           >
             {{ level }}
           </button>
@@ -151,103 +115,24 @@
     <!-- 开关控制 -->
     <view class="control-section">
       <view class="switch-card">
-        <text class="switch-label" @click="startRename('uv', 'UV灯')">{{ getCtrlName('uv', 'UV灯') }}</text>
-        <view class="custom-switch" :class="status.uvLightOn ? 'on' : 'off'" @click="setUV(!status.uvLightOn)">
+        <text class="switch-label" @click="startRename('relay2', '备用开关1')">{{ getCtrlName('relay2', '备用开关1') }}</text>
+        <view class="custom-switch" :class="status.relay2State ? 'on' : 'off'" @click="setRelay2(!status.relay2State)">
           <view class="custom-switch-knob"></view>
         </view>
       </view>
 
       <view class="switch-card">
-        <text class="switch-label" @click="startRename('relay2', '备用开关')">{{ getCtrlName('relay2', '备用开关') }}</text>
-        <view class="custom-switch" :class="status.relay2State ? 'on' : 'off'" @click="setRelay2(!status.relay2State)">
+        <text class="switch-label" @click="startRename('relay3', '备用开关2')">{{ getCtrlName('relay3', '备用开关2') }}</text>
+        <view class="custom-switch" :class="status.relay3State ? 'on' : 'off'" @click="setRelay3(!status.relay3State)">
           <view class="custom-switch-knob"></view>
         </view>
       </view>
-    </view>
-
-    <!-- 定时任务 -->
-    <view class="control-section">
-      <view class="section-title">定时任务</view>
-
-      <view v-if="timers.length === 0" class="empty-tip">
-        <text>暂无定时任务，点击下方按钮添加</text>
-      </view>
-
-      <view v-for="(timer, index) in timers" :key="timer.id" class="timer-card">
-        <view class="timer-card-left">
-          <view class="timer-card-top">
-            <text class="timer-name">{{ timer.name }}</text>
-            <text class="timer-time">{{ ('0' + timer.hour).slice(-2) }}:{{ ('0' + timer.minute).slice(-2) }}</text>
-          </view>
-          <text class="timer-desc">{{ getTaskTypeLabel(timer) }}</text>
-          <text v-if="timer.duration > 0 && timer.cmd !== 'trigger_servo'" class="timer-duration">持续 {{ timer.duration / 60 }} 分钟后停止</text>
-        </view>
-        <view class="timer-card-right">
-          <switch :checked="timer.enabled" @change="toggleTimer(timer)" color="#1a73e8" style="transform: scale(0.8);" />
-          <view class="timer-actions">
-            <text class="timer-edit" @click="openTimerDialog(timer)">编辑</text>
-            <text class="timer-delete" @click="handleDeleteTimer(timer)">删除</text>
-          </view>
-        </view>
-      </view>
-
-      <button class="add-timer-btn" @click="openTimerDialog(null)">+ 添加任务</button>
     </view>
 
     <!-- 底部栏 -->
     <view class="bottom-bar">
       <text class="refresh-time">更新于 {{ lastUpdateTime }}</text>
       <button class="refresh-btn" @click="refreshStatus">↻ 刷新</button>
-    </view>
-
-    <!-- 定时任务弹窗 -->
-    <view v-if="timerDialogVisible" class="dialog-overlay" @click="closeTimerDialog">
-      <view class="dialog-box timer-dialog" @click.stop>
-        <text class="dialog-title">{{ editingTimer ? '编辑任务' : '添加任务' }}</text>
-
-        <text class="timer-form-label">任务名称</text>
-        <input
-          class="dialog-input"
-          v-model="timerForm.name"
-          placeholder="输入任务名称"
-          maxlength="20"
-        />
-
-        <text class="timer-form-label">执行时间</text>
-        <view class="timer-picker-row">
-          <picker mode="multiSelector" :range="[hours, minutes]" @change="onTimeChange">
-            <view class="timer-picker">
-              {{ ('0' + timerForm.hour).slice(-2) }} : {{ ('0' + timerForm.minute).slice(-2) }}
-            </view>
-          </picker>
-        </view>
-
-        <text class="timer-form-label">任务类型</text>
-        <view class="timer-picker-row">
-          <picker mode="selector" :range="taskTypeLabels" @change="onTaskTypeChange">
-            <view class="timer-picker">
-              {{ taskTypeLabels[timerForm.type] }}
-            </view>
-          </picker>
-        </view>
-
-        <text class="timer-form-label">持续时间</text>
-        <view class="timer-picker-row" v-if="taskTypes[timerForm.type].cmd === 'trigger_servo'">
-          <view class="timer-picker"><text style="color:#999">无</text></view>
-        </view>
-        <view class="timer-picker-row" v-else>
-          <picker mode="selector" :range="durationLabels" @change="onDurationChange">
-            <view class="timer-picker">
-              {{ timerForm.durationLabel }}
-            </view>
-          </picker>
-        </view>
-
-        <view class="dialog-buttons" style="margin-top: 40rpx;">
-          <button class="dialog-btn dialog-cancel" @click="closeTimerDialog">取消</button>
-          <button class="dialog-btn dialog-confirm" @click="confirmTimer">确认</button>
-        </view>
-      </view>
     </view>
 
     <!-- 重命名弹窗 -->
@@ -282,13 +167,11 @@ export default {
       status: {
         online: false,
         pwm1Level: 0,
-        pwm2Level: 0,
         pwm3Level: 0,
         airPumpLevel: 0,
-        fanLevel: 0,
-        uvLightOn: false,
         relay1State: false,
         relay2State: false,
+        relay3State: false,
         servoMoving: false,
         adcWQVoltage: 0,
         adcTempVoltage: 0,
@@ -308,55 +191,15 @@ export default {
       wsReconnectTimer: null,
       servoTimer: null,
       servoStartTime: 0,
-      lastClickTime: 0,
-      // 定时任务
-      timers: [],
-      timerDialogVisible: false,
-      editingTimer: null,
-      timerForm: {
-        id: '',
-        name: '',
-        hour: 8,
-        minute: 0,
-        type: 0,
-        cmd: 'trigger_servo',
-        params: {},
-        duration: 0,
-        durationLabel: '不停止'
-      },
-      hours: Array.from({ length: 24 }, (_, i) => ('0' + i).slice(-2)),
-      minutes: Array.from({ length: 60 }, (_, i) => ('0' + i).slice(-2)),
-      taskTypes: [
-        { label: '喂鱼（舵机）', cmd: 'trigger_servo', params: {} },
-        { label: '换水1档（水泵1 level=1）', cmd: 'set_pump', params: { pump: 1, level: 1 } },
-        { label: '换水2档（水泵1 level=2）', cmd: 'set_pump', params: { pump: 1, level: 2 } },
-        { label: '换水3档（水泵1 level=3）', cmd: 'set_pump', params: { pump: 1, level: 3 } },
-        { label: '加气1档（气泵 level=1）', cmd: 'set_air_pump', params: { level: 1 } },
-        { label: '加气2档（气泵 level=2）', cmd: 'set_air_pump', params: { level: 2 } },
-        { label: '加气3档（气泵 level=3）', cmd: 'set_air_pump', params: { level: 3 } },
-        { label: '开灯1档（灯条 level=1）', cmd: 'set_light', params: { level: 1 } },
-        { label: '开灯2档（level=2）', cmd: 'set_light', params: { level: 2 } },
-        { label: '开灯3档（level=3）', cmd: 'set_light', params: { level: 3 } },
-        { label: '风扇1档', cmd: 'set_fan', params: { level: 1 } },
-        { label: '风扇2档', cmd: 'set_fan', params: { level: 2 } },
-        { label: '风扇3档', cmd: 'set_fan', params: { level: 3 } }
-      ],
-      durationOptions: [
-        { label: '不停止', value: 0 },
-        { label: '1分钟', value: 1 },
-        { label: '5分钟', value: 5 },
-        { label: '10分钟', value: 10 },
-        { label: '30分钟', value: 30 },
-        { label: '60分钟', value: 60 }
-      ]
+      lastClickTime: 0
     }
   },
   computed: {
     taskTypeLabels() {
-      return this.taskTypes.map(t => t.label)
+      return []
     },
     durationLabels() {
-      return this.durationOptions.map(d => d.label)
+      return []
     },
     waterQualityText() {
       const v = this.status.tdsValue || 0
@@ -381,7 +224,6 @@ export default {
     }
 
     this.loadStatus()
-    this.loadTimers()
 
     // 连接 WebSocket 接收实时推送
     this.connectWS()
@@ -541,13 +383,11 @@ export default {
       this.status = {
         online: msg.online || false,
         pwm1Level: s.pwm1Level || 0,
-        pwm2Level: s.pwm2Level || 0,
         pwm3Level: s.pwm3Level || 0,
         airPumpLevel: s.airPumpLevel || 0,
-        fanLevel: s.fanLevel || 0,
-        uvLightOn: s.uvLightOn || false,
         relay1State: s.relay1State || false,
         relay2State: s.relay2State || false,
+        relay3State: s.relay3State || false,
         servoMoving: s.servoMoving || false,
         adcWQVoltage: s.adcWQVoltage || 0,
         adcTempVoltage: s.adcTempVoltage || 0,
@@ -574,13 +414,11 @@ export default {
           this.status = {
             online: res.online || false,
             pwm1Level: s.pwm1Level || 0,
-            pwm2Level: s.pwm2Level || 0,
             pwm3Level: s.pwm3Level || 0,
             airPumpLevel: s.airPumpLevel || 0,
-            fanLevel: s.fanLevel || 0,
-            uvLightOn: s.uvLightOn || false,
             relay1State: s.relay1State || false,
             relay2State: s.relay2State || false,
+            relay3State: s.relay3State || false,
             servoMoving: s.servoMoving || false,
             adcWQVoltage: s.adcWQVoltage || 0,
             adcTempVoltage: s.adcTempVoltage || 0,
@@ -665,34 +503,23 @@ export default {
       } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
     },
 
-    async setFan(level) {
-      if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
-      if (!this.checkRateLimit()) return
-      this.status.fanLevel = level
-      try {
-        const res = await sendControlCommand(this.deviceKey, 'set_fan', { level })
-        if (res.success) { setTimeout(() => this.loadStatus(), 800); uni.showToast({ title: '设置成功', icon: 'success' }) }
-        else { uni.showToast({ title: res.message || '设置失败', icon: 'none' }) }
-      } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
-    },
-
-    async setUV(on) {
-      if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
-      if (!this.checkRateLimit()) return
-      this.status.uvLightOn = on
-      try {
-        const res = await sendControlCommand(this.deviceKey, 'set_uv', { on })
-        if (res.success) { setTimeout(() => this.loadStatus(), 800) }
-        else { uni.showToast({ title: res.message || '设置失败', icon: 'none' }) }
-      } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
-    },
-
     async setRelay2(on) {
       if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
       if (!this.checkRateLimit()) return
       this.status.relay2State = on
       try {
         const res = await sendControlCommand(this.deviceKey, 'set_relay2', { on })
+        if (res.success) { setTimeout(() => this.loadStatus(), 800) }
+        else { uni.showToast({ title: res.message || '设置失败', icon: 'none' }) }
+      } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
+    },
+
+    async setRelay3(on) {
+      if (!this.status.online) { uni.showToast({ title: '设备离线', icon: 'none' }); return }
+      if (!this.checkRateLimit()) return
+      this.status.relay3State = on
+      try {
+        const res = await sendControlCommand(this.deviceKey, 'set_relay3', { on })
         if (res.success) { setTimeout(() => this.loadStatus(), 800) }
         else { uni.showToast({ title: res.message || '设置失败', icon: 'none' }) }
       } catch (e) { uni.showToast({ title: '设置失败', icon: 'none' }) }
@@ -762,148 +589,6 @@ export default {
         }
       } catch (error) {
         uni.showToast({ title: '操作失败', icon: 'none' })
-      }
-    },
-
-    // ===== 定时任务 =====
-    getTaskTypeLabel(timer) {
-      const type = this.taskTypes.find(t => t.cmd === timer.cmd && JSON.stringify(t.params) === JSON.stringify(timer.params))
-      return type ? type.label : '未知任务'
-    },
-
-    async loadTimers() {
-      try {
-        const res = await getTimers(this.deviceKey)
-        if (res.success && res.timers) {
-          this.timers = res.timers
-        }
-      } catch (error) {
-        this.timers = []
-      }
-    },
-
-    openTimerDialog(timer) {
-      if (timer) {
-        this.editingTimer = timer
-        const typeIndex = this.taskTypes.findIndex(t => t.cmd === timer.cmd && JSON.stringify(t.params) === JSON.stringify(timer.params))
-        const dur = this.durationOptions.find(d => d.value === (timer.duration / 60))
-        this.timerForm = {
-          id: timer.id,
-          name: timer.name,
-          hour: timer.hour,
-          minute: timer.minute,
-          type: typeIndex >= 0 ? typeIndex : 0,
-          cmd: timer.cmd,
-          params: timer.params,
-          duration: timer.duration / 60,
-          durationLabel: dur ? dur.label : '不停止'
-        }
-      } else {
-        this.editingTimer = null
-        this.timerForm = {
-          id: '',
-          name: '',
-          hour: 8,
-          minute: 0,
-          type: 0,
-          cmd: 'trigger_servo',
-          params: {},
-          duration: 0,
-          durationLabel: '不停止'
-        }
-      }
-      this.timerDialogVisible = true
-    },
-
-    closeTimerDialog() {
-      this.timerDialogVisible = false
-      this.editingTimer = null
-    },
-
-    onTimeChange(e) {
-      const vals = e.detail.value
-      this.timerForm.hour = parseInt(vals[0])
-      this.timerForm.minute = parseInt(vals[1])
-    },
-
-    onTaskTypeChange(e) {
-      const idx = e.detail.value
-      this.timerForm.type = idx
-      const type = this.taskTypes[idx]
-      this.timerForm.cmd = type.cmd
-      this.timerForm.params = { ...type.params }
-    },
-
-    onDurationChange(e) {
-      const idx = e.detail.value
-      const opt = this.durationOptions[idx]
-      this.timerForm.duration = opt.value
-      this.timerForm.durationLabel = opt.label
-    },
-
-    confirmTimer() {
-      if (!this.timerForm.name.trim()) {
-        uni.showToast({ title: '请输入任务名称', icon: 'none' })
-        return
-      }
-
-      const timerData = {
-        id: this.timerForm.id || 'timer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        name: this.timerForm.name.trim(),
-        hour: this.timerForm.hour,
-        minute: this.timerForm.minute,
-        type: this.timerForm.type,
-        cmd: this.timerForm.cmd,
-        params: this.timerForm.params,
-        duration: this.timerForm.duration * 60,
-        enabled: true
-      }
-
-      if (this.editingTimer) {
-        const idx = this.timers.findIndex(t => t.id === this.editingTimer.id)
-        if (idx >= 0) {
-          this.timers[idx] = timerData
-        }
-      } else {
-        this.timers.push(timerData)
-      }
-
-      this.closeTimerDialog()
-      this.saveAllTimers()
-    },
-
-    async handleDeleteTimer(timer) {
-      uni.showModal({
-        title: '确认删除',
-        content: '确定要删除定时任务"' + timer.name + '"吗？',
-        success: async (res) => {
-          if (res.confirm) {
-            try {
-              const result = await deleteTimerApi(this.deviceKey, timer.id)
-              if (result.success) {
-                this.timers = this.timers.filter(t => t.id !== timer.id)
-                uni.showToast({ title: '删除成功', icon: 'success' })
-              } else {
-                uni.showToast({ title: result.message || '删除失败', icon: 'none' })
-              }
-            } catch (e) {
-              uni.showToast({ title: '删除失败', icon: 'none' })
-            }
-          }
-        }
-      })
-    },
-
-    toggleTimer(timer) {
-      timer.enabled = !timer.enabled
-      this.saveAllTimers()
-    },
-
-    async saveAllTimers() {
-      try {
-        await saveTimers(this.deviceKey, this.timers)
-      } catch (error) {
-        uni.showToast({ title: '保存失败', icon: 'none' })
       }
     }
   }

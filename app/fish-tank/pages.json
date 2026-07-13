@@ -26,6 +26,12 @@
       }
     },
     {
+      "path": "pages/control/fish-mini",
+      "style": {
+        "navigationBarTitleText": "宠物联  智能水族 Mini"
+      }
+    },
+    {
       "path": "pages/bind/index",
       "style": {
         "navigationBarTitleText": "绑定设备"

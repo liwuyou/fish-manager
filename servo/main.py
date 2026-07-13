@@ -202,6 +202,7 @@ def get_status():
     return jsonify({
         'success': True,
         'online': dev.get('online', False),
+        'model': dev.get('model', ''),
         'status': dev.get('status', {})
     })
 

@@ -291,8 +291,9 @@ export default {
         let page = '/pages/control/index'
         if (device.model === 'fish_one') {
           page = '/pages/control/fish-one'
+        } else if (device.model === 'fish_mini') {
+          page = '/pages/control/fish-mini'
         }
-        // fish_mini 有自己的独立 App，不在此跳转
         uni.navigateTo({ 
           url: `${page}?device_key=${device.device_key}`
         })
