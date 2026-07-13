@@ -325,15 +325,22 @@ export default {
           for (const key of this.selectedDevices) {
             try {
               const result = await unbindDevice(phone, key)
-              if (result.success) successCount++
-              uni.removeStorageSync('device_name_' + key)
-            } catch (e) {}
+              if (result.success) {
+                successCount++
+                uni.removeStorageSync('device_name_' + key)
+              }
+            } catch (e) {
+              console.error('删除失败', key, e)
+            }
           }
           
-          uni.showToast({ 
-            title: `删除成功 ${successCount} 个`, 
-            icon: 'success' 
-          })
+          if (successCount === this.selectedDevices.length) {
+            uni.showToast({ title: `删除成功 ${successCount} 个`, icon: 'success' })
+          } else if (successCount === 0) {
+            uni.showToast({ title: '删除失败，请检查网络', icon: 'none' })
+          } else {
+            uni.showToast({ title: `删除成功 ${successCount}/${this.selectedDevices.length}`, icon: 'none' })
+          }
           
           this.exitEditMode()
           this.loadDevices()

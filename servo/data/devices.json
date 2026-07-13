@@ -1,42 +1,11 @@
 {
-  "1F0C0604": {
-    "device_key": "1F0C0604",
-    "mac": "3C:8A:1F:0C:06:04",
-    "phone": "18154385008",
-    "online": false,
-    "last_online": 1783925191,
-    "status": {
-      "pwm1Level": 0,
-      "pwm2Level": 0,
-      "pwm3Level": 0,
-      "airPumpLevel": 0,
-      "fanLevel": 0,
-      "uvLightOn": false,
-      "relay1State": true,
-      "relay2State": false,
-      "servoMoving": false,
-      "adcWQVoltage": 0,
-      "adcTempVoltage": 3.109011,
-      "waterTemperature": 37.60635,
-      "tdsValue": 0,
-      "systemPowered": true
-    },
-    "model": "fish_one"
-  },
-  "ggghbvgg": {
-    "device_key": "ggghbvgg",
-    "mac": "",
-    "phone": "18154385008",
-    "online": false,
-    "last_online": 0,
-    "status": {}
-  },
   "BD6013D4": {
     "device_key": "BD6013D4",
     "mac": "58:2A:BD:60:13:D4",
+    "model": "fish_mini",
     "phone": "18154385008",
-    "online": false,
-    "last_online": 1783925714,
+    "online": true,
+    "last_online": 1783927254,
     "status": {
       "pwm1Level": 0,
       "pwm3Level": 0,
@@ -46,11 +15,10 @@
       "relay3State": false,
       "servoMoving": false,
       "adcWQVoltage": 0,
-      "adcTempVoltage": 3.163004,
-      "waterTemperature": 36.97768,
+      "adcTempVoltage": 3.135604,
+      "waterTemperature": 36.33639,
       "tdsValue": 0,
       "systemPowered": true
-    },
-    "model": "fish_mini"
+    }
   }
 }

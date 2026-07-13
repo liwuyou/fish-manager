@@ -126,16 +126,9 @@ def bind_device():
         return jsonify({'success': False, 'message': '手机号和密钥不能为空'}), 400
     
     if device_key not in devices:
-        devices[device_key] = {
-            'device_key': device_key,
-            'mac': '',
-            'phone': phone,
-            'online': False,
-            'last_online': 0,
-            'status': {}
-        }
-    else:
-        devices[device_key]['phone'] = phone
+        return jsonify({'success': False, 'message': '密匙输入错误或设备未向服务器注册'}), 400
+    
+    devices[device_key]['phone'] = phone
     
     if phone not in users:
         users[phone] = []
@@ -149,7 +142,7 @@ def bind_device():
 @app.route('/api/unbind', methods=['POST'])
 def unbind_device():
     data = request.json
-    phone = data.get('phone', '')
+    phone = data.get('phone', '') or data.get('phone_number', '')
     device_key = data.get('device_key', '')
     
     if phone in users and device_key in users[phone]:

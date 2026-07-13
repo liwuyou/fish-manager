@@ -94,9 +94,9 @@ export default {
         } else {
           uni.showToast({ title: res.message || '绑定失败', icon: 'none' })
         }
-      } catch (error) {
+      } catch (e) {
         uni.hideLoading()
-        uni.showToast({ title: '绑定失败', icon: 'none' })
+        uni.showToast({ title: e.message || '绑定失败', icon: 'none' })
       }
     }
   }
