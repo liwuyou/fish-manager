@@ -1,0 +1,16 @@
+{
+  "pages": [
+    {
+      "path": "pages/control/index",
+      "style": {
+        "navigationBarTitleText": "迷你鱼箱"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "迷你鱼箱",
+    "navigationBarBackgroundColor": "#1a73e8",
+    "backgroundColor": "#f5f5f5"
+  }
+}

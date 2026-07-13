@@ -1,25 +1,25 @@
 {
-    "name" : "鱼箱管理",
-    "appid" : "__UNI__1B4AA53",
-    "description" : "养鱼生态箱远程管理APP",
+    "name" : "迷你鱼箱",
+    "appid" : "__UNI__MINI_FISH",
+    "description" : "迷你鱼箱远程控制",
     "versionName" : "1.0.0",
     "versionCode" : "100",
     "transformPx" : false,
     "h5" : {
-        "title" : "鱼箱管理",
+        "title" : "迷你鱼箱",
         "router" : {
             "mode" : "hash",
             "base" : "./"
         },
         "devServer" : {
-            "port" : 5173,
+            "port" : 5174,
             "proxy" : {
                 "/api" : {
-                    "target" : "http://192.168.2.11:7965",
+                    "target" : "http://112.124.107.159:7965",
                     "changeOrigin" : true
                 },
                 "/ws" : {
-                    "target" : "ws://192.168.2.11:7965",
+                    "target" : "ws://112.124.107.159:7965",
                     "changeOrigin" : true,
                     "ws" : true
                 }

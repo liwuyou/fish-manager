@@ -287,8 +287,14 @@ export default {
           this.selectedDevices.push(device.device_key)
         }
       } else {
+        // 根据型号跳转不同控制页
+        let page = '/pages/control/index'
+        if (device.model === 'fish_one') {
+          page = '/pages/control/fish-one'
+        }
+        // fish_mini 有自己的独立 App，不在此跳转
         uni.navigateTo({ 
-          url: `/pages/control/index?device_key=${device.device_key}`
+          url: `${page}?device_key=${device.device_key}`
         })
       }
     },

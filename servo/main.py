@@ -171,7 +171,8 @@ def get_devices():
             'device_key': device_key,
             'online': dev.get('online', False),
             'last_online': dev.get('last_online', 0),
-            'status': dev.get('status', {})
+            'status': dev.get('status', {}),
+            'model': dev.get('model', '')
         })
     
     return jsonify({'success': True, 'devices': result})
@@ -290,6 +291,7 @@ def device_ws_handler(ws):
                         devices[device_key] = {
                             'device_key': device_key,
                             'mac': msg.get('mac', ''),
+                            'model': msg.get('model', ''),
                             'phone': '',
                             'online': True,
                             'last_online': int(time.time()),
@@ -300,6 +302,8 @@ def device_ws_handler(ws):
                         devices[device_key]['last_online'] = int(time.time())
                         if msg.get('mac'):
                             devices[device_key]['mac'] = msg.get('mac', '')
+                        if msg.get('model'):
+                            devices[device_key]['model'] = msg.get('model', '')
                     _schedule_save()
                     print(f"[DEVICE] {device_key} 已连接")
                     

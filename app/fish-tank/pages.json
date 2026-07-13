@@ -20,6 +20,12 @@
       }
     },
     {
+      "path": "pages/control/fish-one",
+      "style": {
+        "navigationBarTitleText": "宠物联  智能水族"
+      }
+    },
+    {
       "path": "pages/bind/index",
       "style": {
         "navigationBarTitleText": "绑定设备"
