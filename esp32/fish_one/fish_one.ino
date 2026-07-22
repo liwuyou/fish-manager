@@ -79,7 +79,7 @@
 #define AP_TIMEOUT 60000         // AP超时 1分钟
 
 // ==================== 远程服务器配置 ====================
-#define WS_SERVER_HOST "192.168.2.11"
+#define WS_SERVER_HOST "fishmanager.top"
 #define WS_SERVER_PORT 7965
 #define WS_SERVER_PATH "/ws/device"
 #define WS_HEARTBEAT_INTERVAL 30000  // WebSocket心跳间隔 30秒

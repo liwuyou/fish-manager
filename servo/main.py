@@ -351,19 +351,23 @@ def device_ws_handler(ws):
         print(f"[WS_ERROR] {device_key}: {e}")
     finally:
         if device_key:
-            if device_key in device_ws:
+            # 只有当前 ws 仍然是 device_ws 中记录的那个连接时，才清理
+            # 避免旧连接 finally 误删新连接的竞态问题
+            if device_ws.get(device_key) is ws:
                 del device_ws[device_key]
-            if device_key in devices:
-                devices[device_key]['online'] = False
-                _schedule_save()
-            print(f"[DEVICE] {device_key} 已断开")
-            
-            broadcast_to_clients(device_key, {
-                'type': 'device_status',
-                'device_key': device_key,
-                'online': False,
-                'status': devices.get(device_key, {}).get('status', {})
-            })
+                if device_key in devices:
+                    devices[device_key]['online'] = False
+                    _schedule_save()
+                print(f"[DEVICE] {device_key} 已断开")
+                broadcast_to_clients(device_key, {
+                    'type': 'device_status',
+                    'device_key': device_key,
+                    'online': False,
+                    'status': devices.get(device_key, {}).get('status', {})
+                })
+            else:
+                # device_ws 中已是新连接，不清理，只打印日志
+                print(f"[DEVICE] {device_key} 旧连接断开，新连接已接管")
 
 # ==================== WebSocket: App客户端 ====================
 @sock.route('/ws/client')
